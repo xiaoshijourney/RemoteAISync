@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:remote_ai_sync/main.dart';
 import 'package:remote_ai_sync/src/application/demo_controller.dart';
+import 'package:remote_ai_sync/src/domain/models.dart';
 
 void main() {
   testWidgets('navigation opens files and connection views', (tester) async {
@@ -31,6 +32,29 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('已允许（本地演示）'), findsOneWidget);
+  });
+
+  testWidgets('session timeline lists non-previewable attachments', (
+    tester,
+  ) async {
+    final controller = DemoController();
+    controller.sendReply(
+      '',
+      attachments: const [
+        AgentAttachment(
+          id: 'archive-1',
+          name: 'source_bundle.zip',
+          sizeBytes: 2048,
+        ),
+      ],
+    );
+    await tester.pumpWidget(RemoteAISyncApp(controller: controller));
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -900));
+    await tester.pumpAndSettle();
+
+    expect(find.text('source_bundle.zip'), findsOneWidget);
+    expect(find.textContaining('暂不支持预览'), findsOneWidget);
+    expect(find.textContaining('尚未传至电脑 Agent'), findsOneWidget);
   });
 
   testWidgets('connection form distinguishes address validation from pairing', (

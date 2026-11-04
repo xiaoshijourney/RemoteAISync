@@ -40,9 +40,12 @@ class DemoController extends ChangeNotifier {
   ToolApproval get approval => _approval;
   String? get selectedPort => _selectedPort;
 
-  void sendReply(String rawText) {
+  void sendReply(
+    String rawText, {
+    List<AgentAttachment> attachments = const [],
+  }) {
     final text = rawText.trim();
-    if (text.isEmpty) return;
+    if (text.isEmpty && attachments.isEmpty) return;
 
     _messages.add(
       AgentMessage(
@@ -50,13 +53,16 @@ class DemoController extends ChangeNotifier {
         author: MessageAuthor.user,
         text: text,
         time: _timeNow(),
+        attachments: List.unmodifiable(attachments),
       ),
     );
     _messages.add(
       AgentMessage(
         id: 'm${_nextMessageId++}',
         author: MessageAuthor.assistant,
-        text: '已记录你的回复。这是本地演示，尚未连接电脑上的 Agent。',
+        text: attachments.isEmpty
+            ? '已记录你的回复。这是本地演示，尚未连接电脑上的 Agent。'
+            : '已记录你的回复和 ${attachments.length} 个附件。当前是本地演示，附件内容尚未传至电脑 Agent。',
         time: _timeNow(),
       ),
     );

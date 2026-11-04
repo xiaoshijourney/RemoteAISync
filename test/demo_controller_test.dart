@@ -14,6 +14,22 @@ void main() {
       expect(controller.messages[4].text, contains('本地演示'));
     });
 
+    test('records attachment-only messages without claiming transfer', () {
+      final controller = DemoController();
+      const attachment = AgentAttachment(
+        id: 'file-1',
+        name: 'design.pdf',
+        sizeBytes: 4096,
+        mimeType: 'application/pdf',
+      );
+
+      controller.sendReply('', attachments: const [attachment]);
+
+      expect(controller.messages[3].text, isEmpty);
+      expect(controller.messages[3].attachments.single.name, 'design.pdf');
+      expect(controller.messages[4].text, contains('尚未传至电脑 Agent'));
+    });
+
     test('resolves a pending approval once', () {
       final controller = DemoController();
 

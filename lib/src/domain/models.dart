@@ -6,12 +6,28 @@ class AgentMessage {
     required this.author,
     required this.text,
     required this.time,
+    this.attachments = const [],
   });
 
   final String id;
   final MessageAuthor author;
   final String text;
   final String time;
+  final List<AgentAttachment> attachments;
+}
+
+class AgentAttachment {
+  const AgentAttachment({
+    required this.id,
+    required this.name,
+    required this.sizeBytes,
+    this.mimeType,
+  });
+
+  final String id;
+  final String name;
+  final int sizeBytes;
+  final String? mimeType;
 }
 
 enum ApprovalStatus { pending, approved, rejected }

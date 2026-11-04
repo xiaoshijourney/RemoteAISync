@@ -140,9 +140,10 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
     final host = value?.trim() ?? '';
     if (host.isEmpty) return '请输入电脑 IP 或主机名';
     final isIpv4 = _isValidIpv4(host);
-    final isIpv6 =
-        host.contains(':') && RegExp(r'^[0-9a-fA-F:.%]+$').hasMatch(host);
-    final isHostName = RegExp(r'^[a-zA-Z0-9][a-zA-Z0-9.-]*$').hasMatch(host);
+    final isIpv4Like = RegExp(r'^\d+(?:\.\d+){3}$').hasMatch(host);
+    final isIpv6 = _isValidIpv6(host);
+    final isHostName = _isValidHostName(host);
+    if (isIpv4Like && !isIpv4) return '地址格式不正确';
     if (!isIpv4 && !isIpv6 && !isHostName) return '地址格式不正确';
     return null;
   }
@@ -154,6 +155,34 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
       final value = int.tryParse(part);
       return value != null && value >= 0 && value <= 255;
     });
+  }
+
+  bool _isValidIpv6(String host) {
+    if (!host.contains(':') || host.contains(':::')) return false;
+    final compressionIndex = host.indexOf('::');
+    final hasCompression = compressionIndex >= 0;
+    if (hasCompression && host.indexOf('::', compressionIndex + 2) >= 0) {
+      return false;
+    }
+
+    final groups = host.split(':').where((group) => group.isNotEmpty).toList();
+    if (groups.any(
+      (group) => group.length > 4 || !RegExp(r'^[0-9a-fA-F]+$').hasMatch(group),
+    )) {
+      return false;
+    }
+    return hasCompression ? groups.length < 8 : groups.length == 8;
+  }
+
+  bool _isValidHostName(String host) {
+    if (host.length > 253) return false;
+    final labels = host.split('.');
+    return labels.every(
+      (label) =>
+          label.isNotEmpty &&
+          label.length <= 63 &&
+          RegExp(r'^[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?$').hasMatch(label),
+    );
   }
 
   String? _validatePort(String? value) {

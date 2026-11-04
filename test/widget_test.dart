@@ -32,4 +32,23 @@ void main() {
 
     expect(find.text('已允许（本地演示）'), findsOneWidget);
   });
+
+  testWidgets('connection form distinguishes address validation from pairing', (
+    tester,
+  ) async {
+    await tester.pumpWidget(RemoteAISyncApp(controller: DemoController()));
+    await tester.tap(find.text('连接'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextFormField).first, '999.999.1.1');
+    await tester.tap(find.text('检查连接配置'));
+    await tester.pumpAndSettle();
+    expect(find.text('地址格式不正确'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextFormField).first, '192.168.1.20');
+    await tester.tap(find.text('检查连接配置'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('主机端服务尚未接入'), findsOneWidget);
+    expect(find.text('尚未连接'), findsOneWidget);
+  });
 }

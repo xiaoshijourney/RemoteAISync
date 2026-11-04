@@ -48,5 +48,27 @@ void main() {
       expect(controller.selectedPort, '3000');
       expect(controller.messages.last.text, '预览端口使用 3000');
     });
+
+    test(
+      'does not restore demo data after a host connection attempt',
+      () async {
+        final controller = DemoController();
+
+        try {
+          await controller.connect(
+            address: '127.0.0.1',
+            port: 1,
+            pairingToken: 'x' * 40,
+          );
+        } catch (_) {}
+
+        expect(controller.isDemo, isFalse);
+        expect(controller.messages, isEmpty);
+        expect(await controller.sendReply('continue'), isNotNull);
+        controller.resolveApproval(allow: true);
+        expect(controller.approval.status, ApprovalStatus.pending);
+        controller.dispose();
+      },
+    );
   });
 }

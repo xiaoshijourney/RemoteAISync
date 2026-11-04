@@ -1,5 +1,19 @@
 enum MessageAuthor { assistant, user, tool, system }
 
+enum HostConnectionStatus { disconnected, connecting, connected, error }
+
+class HostSession {
+  const HostSession({
+    required this.id,
+    required this.title,
+    required this.updatedAt,
+  });
+
+  final String id;
+  final String title;
+  final String updatedAt;
+}
+
 class AgentMessage {
   const AgentMessage({
     required this.id,

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
@@ -19,14 +21,19 @@ class SessionScreen extends StatefulWidget {
 class _SessionScreenState extends State<SessionScreen> {
   final Map<String, XFile> _localFiles = {};
 
-  void _sendMessage(String text, List<_SelectedAttachment> selected) {
-    for (final item in selected) {
-      _localFiles[item.attachment.id] = item.file;
-    }
-    widget.controller.sendReply(
+  Future<String?> _sendMessage(
+    String text,
+    List<_SelectedAttachment> selected,
+  ) async {
+    final error = await widget.controller.sendReply(
       text,
       attachments: selected.map((item) => item.attachment).toList(),
     );
+    if (error != null) return error;
+    for (final item in selected) {
+      _localFiles[item.attachment.id] = item.file;
+    }
+    return null;
   }
 
   void _openAttachment(AgentAttachment attachment) {
@@ -40,6 +47,14 @@ class _SessionScreenState extends State<SessionScreen> {
     return AnimatedBuilder(
       animation: widget.controller,
       builder: (context, _) {
+        final selected = widget.controller.sessions.where(
+          (session) => session.id == widget.controller.selectedSessionId,
+        );
+        final selectedTitle = selected.isEmpty
+            ? 'OpenCode 会话'
+            : selected.first.title;
+        final isDemo = widget.controller.isDemo;
+        final isLive = widget.controller.isLive;
         return Column(
           children: [
             Expanded(
@@ -49,13 +64,54 @@ class _SessionScreenState extends State<SessionScreen> {
                   Text('会话', style: Theme.of(context).textTheme.headlineSmall),
                   const SizedBox(height: 5),
                   Text(
-                    '查看 Agent 进度，并处理需要你确认的事项。',
+                    widget.controller.isLive
+                        ? '查看 OpenCode 会话并发送远程回复。'
+                        : widget.controller.isDemo
+                        ? '查看 Agent 进度，并处理需要你确认的事项。'
+                        : '连接电脑主机后读取 OpenCode 会话。',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                   const SizedBox(height: 18),
-                  const _DemoNotice(),
+                  if (widget.controller.isLive) ...[
+                    _LiveSessionNotice(
+                      openCodeVersion: widget.controller.hostVersion ?? '',
+                    ),
+                    const SizedBox(height: 16),
+                    if (widget.controller.sessions.isEmpty)
+                      const _EmptySessions()
+                    else
+                      _SessionPicker(
+                        sessions: widget.controller.sessions,
+                        selectedId: widget.controller.selectedSessionId,
+                        onSelected: (session) {
+                          unawaited(
+                            widget.controller
+                                .selectSession(session)
+                                .catchError((_) {}),
+                          );
+                        },
+                      ),
+                  ] else if (widget.controller.isDemo) ...[
+                    const _DemoNotice(),
+                  ] else ...[
+                    _HostUnavailableNotice(
+                      message: widget.controller.connectionError,
+                    ),
+                  ],
                   const SizedBox(height: 16),
-                  const _SessionSummary(),
+                  _SessionSummary(
+                    title: isDemo
+                        ? 'OpenCode'
+                        : isLive
+                        ? selectedTitle
+                        : '电脑主机',
+                    subtitle: isDemo
+                        ? 'remotaisync-demo  ·  本地样例会话'
+                        : isLive
+                        ? 'OpenCode ${widget.controller.hostVersion ?? ''}'
+                        : '等待连接',
+                    isLive: isLive,
+                  ),
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 14),
                     child: Divider(height: 1, color: appLine),
@@ -65,7 +121,7 @@ class _SessionScreenState extends State<SessionScreen> {
                       message: message,
                       onOpenAttachment: _openAttachment,
                     ),
-                    if (message.id == 'm2') ...[
+                    if (widget.controller.isDemo && message.id == 'm2') ...[
                       const SizedBox(height: 5),
                       _ApprovalPanel(
                         approval: widget.controller.approval,
@@ -77,7 +133,13 @@ class _SessionScreenState extends State<SessionScreen> {
                       const SizedBox(height: 14),
                     ],
                   ],
-                  if (widget.controller.selectedPort == null) ...[
+                  if (widget.controller.isLive &&
+                      widget.controller.selectedSessionId != null &&
+                      widget.controller.messages.isEmpty) ...[
+                    const _LoadingMessages(),
+                  ],
+                  if (widget.controller.isDemo &&
+                      widget.controller.selectedPort == null) ...[
                     const SizedBox(height: 2),
                     _PortQuestion(onChoose: widget.controller.choosePort),
                   ],
@@ -85,7 +147,13 @@ class _SessionScreenState extends State<SessionScreen> {
                 ],
               ),
             ),
-            _MessageComposer(onSend: _sendMessage),
+            _MessageComposer(
+              onSend: _sendMessage,
+              enabled:
+                  widget.controller.isDemo ||
+                  (widget.controller.isLive &&
+                      widget.controller.selectedSessionId != null),
+            ),
           ],
         );
       },
@@ -126,8 +194,142 @@ class _DemoNotice extends StatelessWidget {
   }
 }
 
+class _HostUnavailableNotice extends StatelessWidget {
+  const _HostUnavailableNotice({this.message});
+
+  final String? message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF4DF),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFF0D9AB)),
+      ),
+      child: Text(
+        message ?? '尚未连接电脑主机。请到“连接”页面启动本机 OpenCode 桥接。',
+        style: const TextStyle(color: Color(0xFF6D4B13), fontSize: 12),
+      ),
+    );
+  }
+}
+
+class _LiveSessionNotice extends StatelessWidget {
+  const _LiveSessionNotice({required this.openCodeVersion});
+
+  final String openCodeVersion;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEAF2EE),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFC8DDD1)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.sync, color: appGreen, size: 18),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Text(
+              'OpenCode $openCodeVersion · 回复会提交到所选会话。工具审批仍由 OpenCode 本机权限策略处理。',
+              style: const TextStyle(
+                color: Color(0xFF315642),
+                fontSize: 12,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptySessions extends StatelessWidget {
+  const _EmptySessions();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: appLine),
+      ),
+      child: Text(
+        '当前工作区没有 OpenCode 会话。先在电脑上打开 OpenCode 并开始一个会话。',
+        style: Theme.of(context).textTheme.bodyMedium,
+      ),
+    );
+  }
+}
+
+class _SessionPicker extends StatelessWidget {
+  const _SessionPicker({
+    required this.sessions,
+    required this.selectedId,
+    required this.onSelected,
+  });
+
+  final List<HostSession> sessions;
+  final String? selectedId;
+  final ValueChanged<HostSession> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final selectedExists = sessions.any((session) => session.id == selectedId);
+    return DropdownButtonFormField<String>(
+      key: const Key('host-session-picker'),
+      initialValue: selectedExists ? selectedId : null,
+      decoration: const InputDecoration(
+        labelText: 'OpenCode 会话',
+        prefixIcon: Icon(Icons.forum_outlined),
+      ),
+      items: [
+        for (final session in sessions)
+          DropdownMenuItem(value: session.id, child: Text(session.title)),
+      ],
+      onChanged: (id) {
+        for (final session in sessions) {
+          if (session.id == id) {
+            onSelected(session);
+            break;
+          }
+        }
+      },
+    );
+  }
+}
+
+class _LoadingMessages extends StatelessWidget {
+  const _LoadingMessages();
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 20),
+    child: Center(
+      child: Text('正在读取会话…', style: Theme.of(context).textTheme.bodySmall),
+    ),
+  );
+}
+
 class _SessionSummary extends StatelessWidget {
-  const _SessionSummary();
+  const _SessionSummary({
+    required this.title,
+    required this.subtitle,
+    required this.isLive,
+  });
+
+  final String title;
+  final String subtitle;
+  final bool isLive;
 
   @override
   Widget build(BuildContext context) {
@@ -147,26 +349,28 @@ class _SessionSummary extends StatelessWidget {
               color: const Color(0xFFE8F1ED),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Icon(Icons.terminal, color: appGreen, size: 20),
+            child: Icon(
+              isLive ? Icons.forum_outlined : Icons.terminal,
+              color: appGreen,
+              size: 20,
+            ),
           ),
           const SizedBox(width: 11),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'OpenCode',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
+                Text(title, style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 3),
-                Text(
-                  'remotaisync-demo  ·  本地样例会话',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
+                Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
               ],
             ),
           ),
-          const Icon(Icons.cloud_off_outlined, color: appMuted, size: 19),
+          Icon(
+            isLive ? Icons.computer_outlined : Icons.cloud_off_outlined,
+            color: appMuted,
+            size: 19,
+          ),
         ],
       ),
     );
@@ -437,10 +641,14 @@ class _PortQuestion extends StatelessWidget {
 }
 
 class _MessageComposer extends StatefulWidget {
-  const _MessageComposer({required this.onSend});
+  const _MessageComposer({required this.onSend, required this.enabled});
 
-  final void Function(String text, List<_SelectedAttachment> attachments)
+  final Future<String?> Function(
+    String text,
+    List<_SelectedAttachment> attachments,
+  )
   onSend;
+  final bool enabled;
 
   @override
   State<_MessageComposer> createState() => _MessageComposerState();
@@ -450,6 +658,7 @@ class _MessageComposerState extends State<_MessageComposer> {
   final _textController = TextEditingController();
   final List<_SelectedAttachment> _attachments = [];
   bool _isPicking = false;
+  bool _isSending = false;
   int _nextAttachmentId = 0;
 
   @override
@@ -489,10 +698,20 @@ class _MessageComposerState extends State<_MessageComposer> {
     }
   }
 
-  void _send() {
+  Future<void> _send() async {
+    if (!widget.enabled || _isSending) return;
     final value = _textController.text;
     if (value.trim().isEmpty && _attachments.isEmpty) return;
-    widget.onSend(value, List.of(_attachments));
+    setState(() => _isSending = true);
+    final error = await widget.onSend(value, List.of(_attachments));
+    if (!mounted) return;
+    setState(() => _isSending = false);
+    if (error != null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error)));
+      return;
+    }
     _textController.clear();
     setState(_attachments.clear);
     FocusScope.of(context).unfocus();
@@ -541,7 +760,7 @@ class _MessageComposerState extends State<_MessageComposer> {
               IconButton(
                 key: const Key('add-attachment'),
                 tooltip: '添加附件',
-                onPressed: _isPicking ? null : _pickFiles,
+                onPressed: _isPicking || !widget.enabled ? null : _pickFiles,
                 icon: _isPicking
                     ? const SizedBox.square(
                         dimension: 18,
@@ -553,6 +772,7 @@ class _MessageComposerState extends State<_MessageComposer> {
                 child: TextField(
                   key: const Key('message-composer'),
                   controller: _textController,
+                  enabled: widget.enabled && !_isSending,
                   minLines: 1,
                   maxLines: 4,
                   textInputAction: TextInputAction.send,
@@ -566,9 +786,14 @@ class _MessageComposerState extends State<_MessageComposer> {
               const SizedBox(width: 8),
               IconButton.filled(
                 key: const Key('send-reply'),
-                tooltip: '发送消息（本地演示）',
-                onPressed: _send,
-                icon: const Icon(Icons.arrow_upward),
+                tooltip: _isSending ? '正在发送' : '发送消息',
+                onPressed: widget.enabled && !_isSending ? _send : null,
+                icon: _isSending
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.arrow_upward),
               ),
             ],
           ),

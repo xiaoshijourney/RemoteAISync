@@ -1,38 +1,45 @@
 # RemoteAISync
 
-Flutter client for remotely viewing and continuing AI Agent sessions hosted on a Windows PC.
+RemoteAISync is a Flutter client and a local Windows host for viewing and replying to OpenCode sessions. The current milestone supports a browser on the same computer as the host.
 
-## Current status
+## Current milestone
 
-This first milestone is a browser-runnable UI prototype backed by local demo data. It does not connect to a Windows host, execute approvals, read host files, or launch programs. Every demo-only action is labelled in the interface.
+- Starts a private OpenCode v2 API process for the selected project directory.
+- Lists the newest 50 sessions in that directory and reads the latest 100 messages in the selected session.
+- Displays assistant text and tool calls, and sends text replies to the selected session.
+- Uses an ephemeral pairing token for the browser-to-host WebSocket handshake.
+- Binds both the host WebSocket and its managed OpenCode API process to `127.0.0.1`.
 
-Implemented in the prototype:
+The bridge was verified against OpenCode v2.0.6. It does not expose the host to other devices yet. File transfer, host file browsing, approvals, app launching, window streaming, LAN access, IPv6, and relays are not implemented. The files view and approval flow remain clearly marked demo data. Attachments can be selected and previewed in the browser, but are not sent to OpenCode.
 
-- Session timeline, reply composer, option selection, and local approval state transitions.
-- Select any file as a message attachment; preview common image formats and PDFs, while other files remain attachable without preview.
-- Sample workspace file list and source preview.
-- Host address and port format validation.
-- Responsive Flutter Web and Android project targets.
-
-Attachment selection and preview currently run locally in the browser. File contents are not transferred because the Windows host and transfer protocol are not implemented yet; the UI reports this when a message is sent. There is no fixed client-side size cap. The host will apply configurable storage quotas during the transfer milestone, and received attachments will never be executed automatically.
+RemoteAISync does not add a cloud service. OpenCode itself continues to use the model provider configured on the computer.
 
 ## Run locally
 
+Install dependencies once:
+
 ```powershell
 flutter pub get
-flutter run -d edge
 ```
 
-If Edge is not detected by Flutter, start a web server and open the printed local URL in a browser:
+In one PowerShell window, start the host for this project:
+
+```powershell
+dart run host/bin/remotaisync_host.dart --project "$PWD" --port 8787
+```
+
+Copy the one-time pairing token printed by the host. In a second window, start Flutter Web:
 
 ```powershell
 flutter run -d web-server --web-hostname 127.0.0.1 --web-port 8765
 ```
 
+`--project` must point to the workspace used by the OpenCode sessions you want to view. Open the local URL printed by Flutter, choose **连接**, keep the host address at `127.0.0.1`, enter port `8787` and the pairing token, then connect. If either port is occupied, select another port and use the same host port in the browser form. Stop the host with Ctrl+C.
+
 ## Checks
 
 ```powershell
-dart format lib test
+dart format lib host test
 flutter analyze
 flutter test
 flutter build web
@@ -40,17 +47,8 @@ flutter build web
 
 ## Project layout
 
-- `lib/src/domain`: session, message, approval, and file models.
-- `lib/src/application`: demo state controller; future host-backed controller will implement the same UI-facing actions.
-- `lib/src/presentation`: app shell, theme, and screens.
-- `docs/protocol.md`: proposed host/client event contract.
-
-## Planned implementation order
-
-1. Validate this UI prototype in a local browser.
-2. Implement the Windows user-session host and a versioned WebSocket event protocol.
-3. Replace demo state with a host repository, initially targeting managed OpenCode sessions on a LAN.
-4. Add durable event recovery, device pairing, and host-backed approvals.
-5. Implement resumable attachment transfer to the Windows host, then add single-window WebRTC, remote network paths, and additional Agent adapters.
-
-The browser and Android client share Flutter/Dart code. Android remains a supported target; the first visual validation uses Flutter Web for a faster local feedback loop.
+- `host/`: local OpenCode process manager and WebSocket bridge.
+- `lib/src/domain`: shared session, message, approval, and file models.
+- `lib/src/application`: demo state and WebSocket host client.
+- `lib/src/presentation`: app shell and Flutter screens.
+- `docs/protocol.md`: implemented local protocol and deferred capabilities.

@@ -1,54 +1,43 @@
-# Host / Client Protocol Draft
+# Host / Client Protocol
 
-This is a design contract for the next implementation milestone. The current Flutter prototype does not connect to it yet.
+## Implemented local milestone
 
-## Control channel
+The Windows host exposes `ws://127.0.0.1:8787/ws`. It accepts WebSocket origins on loopback hosts and requires the one-time pairing token in the first `client.hello` command. The host is loopback-only, so this endpoint is for a browser running on the same computer; it is not a LAN or phone endpoint. Remote pairing will require authenticated encryption before the host binds to any network interface.
 
-- Use a versioned JSON message envelope over WebSocket for LAN and relay-backed control connections.
-- For a future peer-to-peer path, preserve the same envelope and command semantics over a reliable WebRTC DataChannel.
-- Keep video on WebRTC media tracks. Transfer all file types as resumable chunks; send metadata and transfer state on the control channel.
-- Pairing must establish authenticated encrypted transport before session data is sent.
+The host starts a separate OpenCode v2 API process for the selected project directory. That process uses a random local port and random Basic Auth password, both scoped to that process, and binds only to `127.0.0.1`. The bridge reads sessions and messages through this API; it does not inspect other OpenCode directories or scrape process output.
 
-## Event envelope
+Supported commands:
+
+- `client.hello`: validate the current pairing token.
+- `session.select`: read a session's latest 100 messages.
+- `session.refresh`: refresh the session list and selected session.
+- `session.reply`: submit text to the selected OpenCode session.
+
+The host lists the newest 50 sessions for the configured directory. Message history is capped at the latest 100 messages and displayed oldest-to-newest. OpenCode events trigger refreshes; a three-second refresh also runs as a fallback. Commands receive `command.result` or `command.error` events.
+
+Events use the version 1 JSON envelope:
 
 ```json
 {
   "schemaVersion": 1,
-  "eventId": "evt-uuid",
-  "deviceId": "device-id",
+  "eventId": "evt-id",
+  "deviceId": "remoteaisync-host",
   "sessionId": "session-id",
   "seq": 42,
   "createdAt": "2026-11-04T06:00:00Z",
-  "kind": "approval.requested",
+  "kind": "session.snapshot",
   "payload": {}
 }
 ```
 
-The host assigns monotonically increasing `seq` values per session and persists events before publishing them. A reconnecting client sends its last acknowledged sequence and receives missing events or a current snapshot.
+The current bridge assigns in-memory sequence numbers. It does not persist events, deduplicate commands, or replay missed events after reconnect. `expectedRevision` is reserved in the command envelope but is not enforced yet.
 
-## Commands
+## Deferred protocol work
 
-Commands carry a unique `commandId`, `sessionId`, and the expected session revision. The host deduplicates command IDs and returns an explicit result. Approval commands reference one pending approval ID and expire; an approval is valid only if the host confirms it before the protected action executes.
+- Durable session snapshots, command deduplication, event replay, and reconnect recovery.
+- Device pairing for other computers and phones, authenticated encrypted transport, LAN discovery, IPv6, and optional self-hosted relay.
+- Resumable file transfer for arbitrary file types. Preview support for images and PDFs remains a client capability; receiving a file will never execute it.
+- Capability declarations for each Agent adapter, including whether it can observe, reply, interrupt, or block a tool before execution.
+- WebRTC for one application window only. Full desktop capture is out of scope.
 
-Initial command kinds:
-
-- `session.reply`
-- `session.interrupt`
-- `approval.resolve`
-- `file.list`
-- `file.read`
-- `program.launch` (host allowlist only)
-- `attachment.offer`
-- `attachment.cancel`
-
-## Attachments
-
-The client must not restrict attachments by extension. Image and PDF previews are a client capability; other files remain attachable without an in-app preview. File names, extensions, and MIME types are untrusted hints and must not determine whether the host executes a file.
-
-An attachment offer includes a unique `transferId`, the session ID, original display name, byte length, and an optional MIME hint. The host sanitizes the name and stores the content in a per-session incoming-attachments directory. The client streams bounded binary chunks with `transferId`, byte offset, and chunk length; the host acknowledges the highest contiguous offset so interrupted transfers can resume. The host verifies a final SHA-256 digest before marking the attachment available to an Agent adapter.
-
-The host enforces configurable per-file and per-session storage quotas based on available disk space. The client does not impose an arbitrary fixed size cap or load a whole file into memory. Attachments are data only: receiving one never launches or executes it. Any later program launch or tool action remains subject to a separate allowlist and approval flow.
-
-## Adapter capability declaration
-
-Each Agent adapter reports support independently for observation, reply, interrupt, pre-execution approval, file changes, and session recovery. Read-only adapters must not expose approval controls as though they can block execution.
+The current OpenCode adapter sends only text to `/api/session/{sessionID}/prompt`. Approval interception, file transfer, filesystem access, program launch, and window control are not enabled by this protocol version.

@@ -1,8 +1,14 @@
 import 'package:flutter/foundation.dart';
 
+import 'host_client.dart';
 import '../domain/models.dart';
 
 class DemoController extends ChangeNotifier {
+  DemoController() {
+    host.addListener(notifyListeners);
+  }
+
+  final HostClient host = HostClient();
   final List<AgentMessage> _messages = [
     const AgentMessage(
       id: 'm1',
@@ -35,17 +41,61 @@ class DemoController extends ChangeNotifier {
 
   int _nextMessageId = 4;
   String? _selectedPort;
+  bool _demoMode = true;
 
-  List<AgentMessage> get messages => List.unmodifiable(_messages);
+  List<AgentMessage> get messages =>
+      _demoMode ? List.unmodifiable(_messages) : host.messages;
+  List<HostSession> get sessions => host.sessions;
+  String? get selectedSessionId => host.selectedSessionId;
+  String? get connectionError => host.errorMessage;
+  String? get hostVersion => host.hostVersion;
+  HostConnectionStatus get connectionStatus => host.status;
+  bool get isLive => host.status == HostConnectionStatus.connected;
+  bool get isDemo => _demoMode;
   ToolApproval get approval => _approval;
   String? get selectedPort => _selectedPort;
 
-  void sendReply(
+  Future<void> connect({
+    required String address,
+    required String pairingToken,
+    int port = 8787,
+  }) {
+    _demoMode = false;
+    notifyListeners();
+    return host.connect(
+      address: address,
+      port: port,
+      pairingToken: pairingToken,
+    );
+  }
+
+  Future<void> disconnect() => host.disconnect();
+
+  Future<void> selectSession(HostSession session) =>
+      host.selectSession(session);
+
+  Future<String?> sendReply(
     String rawText, {
     List<AgentAttachment> attachments = const [],
-  }) {
+  }) async {
     final text = rawText.trim();
-    if (text.isEmpty && attachments.isEmpty) return;
+    if (text.isEmpty && attachments.isEmpty) return null;
+    if (!isDemo && !isLive) {
+      return connectionError ?? '请先连接电脑主机，再发送消息。';
+    }
+    if (isLive) {
+      if (attachments.isNotEmpty) {
+        return '当前主机连接尚未启用附件上传，请先移除附件。';
+      }
+      if (text.isNotEmpty) {
+        try {
+          await host.sendReply(text);
+        } catch (error) {
+          return error.toString().replaceFirst('Bad state: ', '');
+        }
+      }
+      return null;
+    }
 
     _messages.add(
       AgentMessage(
@@ -67,9 +117,11 @@ class DemoController extends ChangeNotifier {
       ),
     );
     notifyListeners();
+    return null;
   }
 
   void choosePort(String port) {
+    if (!isDemo) return;
     _selectedPort = port;
     _messages.add(
       AgentMessage(
@@ -83,7 +135,7 @@ class DemoController extends ChangeNotifier {
   }
 
   void resolveApproval({required bool allow}) {
-    if (_approval.status != ApprovalStatus.pending) return;
+    if (!isDemo || _approval.status != ApprovalStatus.pending) return;
 
     _approval = _approval.copyWith(
       status: allow ? ApprovalStatus.approved : ApprovalStatus.rejected,
@@ -102,5 +154,12 @@ class DemoController extends ChangeNotifier {
   String _timeNow() {
     final now = DateTime.now();
     return '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  void dispose() {
+    host.removeListener(notifyListeners);
+    host.dispose();
+    super.dispose();
   }
 }

@@ -1,3 +1,7 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:remote_ai_sync/main.dart';
@@ -16,8 +20,7 @@ void main() {
 
     await tester.tap(find.text('连接'));
     await tester.pumpAndSettle();
-    expect(find.text('检查连接配置'), findsOneWidget);
-    expect(find.text('局域网直连'), findsOneWidget);
+    expect(find.text('连接本机主机'), findsOneWidget);
   });
 
   testWidgets('approval buttons update the displayed local demo status', (
@@ -57,22 +60,82 @@ void main() {
     expect(find.textContaining('尚未传至电脑 Agent'), findsOneWidget);
   });
 
-  testWidgets('connection form distinguishes address validation from pairing', (
+  testWidgets('connection form validates port and pairing token', (
     tester,
   ) async {
     await tester.pumpWidget(RemoteAISyncApp(controller: DemoController()));
     await tester.tap(find.text('连接'));
     await tester.pumpAndSettle();
 
-    await tester.enterText(find.byType(TextFormField).first, '999.999.1.1');
-    await tester.tap(find.text('检查连接配置'));
+    await tester.enterText(find.byType(TextFormField).at(1), '70000');
+    await tester.tap(find.byKey(const Key('connect-local-host')));
     await tester.pumpAndSettle();
-    expect(find.text('地址格式不正确'), findsOneWidget);
+    expect(find.text('端口需为 1–65535'), findsOneWidget);
 
-    await tester.enterText(find.byType(TextFormField).first, '192.168.1.20');
-    await tester.tap(find.text('检查连接配置'));
+    await tester.enterText(find.byType(TextFormField).at(1), '8787');
+    await tester.tap(find.byKey(const Key('connect-local-host')));
     await tester.pumpAndSettle();
-    expect(find.textContaining('主机端服务尚未接入'), findsOneWidget);
+    expect(find.text('请输入主机终端显示的完整令牌'), findsOneWidget);
     expect(find.text('尚未连接'), findsOneWidget);
+  });
+
+  testWidgets('live host mode does not expose demo interactions', (
+    tester,
+  ) async {
+    late HttpServer server;
+    late StreamSubscription<HttpRequest> serverSubscription;
+    await tester.runAsync(() async {
+      server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      serverSubscription = server.listen((request) async {
+        final socket = await WebSocketTransformer.upgrade(request);
+        socket.listen((_) {
+          socket.add(
+            jsonEncode({
+              'schemaVersion': 1,
+              'kind': 'host.ready',
+              'payload': {'openCodeVersion': '2.0.6'},
+            }),
+          );
+          socket.add(
+            jsonEncode({
+              'schemaVersion': 1,
+              'kind': 'host.snapshot',
+              'payload': {'sessions': []},
+            }),
+          );
+        });
+      });
+    });
+    final controller = DemoController();
+    try {
+      await tester.runAsync(
+        () => controller.connect(
+          address: '127.0.0.1',
+          port: server.port,
+          pairingToken: 'x' * 40,
+        ),
+      );
+
+      await tester.pumpWidget(RemoteAISyncApp(controller: controller));
+      await tester.pumpAndSettle();
+
+      expect(controller.isDemo, isFalse);
+      expect(find.text('等待人工审批'), findsNothing);
+      expect(find.text('请选择一个端口。'), findsNothing);
+      expect(find.textContaining('演示数据'), findsNothing);
+      expect(
+        tester
+            .widget<TextField>(find.byKey(const Key('message-composer')))
+            .enabled,
+        isFalse,
+      );
+    } finally {
+      await tester.runAsync(() async {
+        await controller.disconnect();
+        await serverSubscription.cancel();
+        await server.close(force: true);
+      });
+      controller.dispose();
+    }
   });
 }

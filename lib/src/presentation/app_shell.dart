@@ -20,57 +20,66 @@ class _AppShellState extends State<AppShell> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Column(
-        children: [
-          const _BrandBar(),
-          Expanded(
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 760),
-                child: IndexedStack(
-                  index: _selectedIndex,
-                  children: [
-                    SessionScreen(controller: widget.controller),
-                    const FilesScreen(),
-                    const ConnectionScreen(),
-                  ],
+    return AnimatedBuilder(
+      animation: widget.controller,
+      builder: (context, _) => Scaffold(
+        body: Column(
+          children: [
+            _BrandBar(
+              isDemo: widget.controller.isDemo,
+              isLive: widget.controller.isLive,
+            ),
+            Expanded(
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 760),
+                  child: IndexedStack(
+                    index: _selectedIndex,
+                    children: [
+                      SessionScreen(controller: widget.controller),
+                      const FilesScreen(),
+                      ConnectionScreen(controller: widget.controller),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _selectedIndex,
-        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        onDestinationSelected: (index) {
-          setState(() => _selectedIndex = index);
-        },
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.chat_bubble_outline),
-            selectedIcon: Icon(Icons.chat_bubble),
-            label: '会话',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.folder_outlined),
-            selectedIcon: Icon(Icons.folder),
-            label: '文件',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.devices_outlined),
-            selectedIcon: Icon(Icons.devices),
-            label: '连接',
-          ),
-        ],
+          ],
+        ),
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: _selectedIndex,
+          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+          onDestinationSelected: (index) {
+            setState(() => _selectedIndex = index);
+          },
+          destinations: const [
+            NavigationDestination(
+              icon: Icon(Icons.chat_bubble_outline),
+              selectedIcon: Icon(Icons.chat_bubble),
+              label: '会话',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.folder_outlined),
+              selectedIcon: Icon(Icons.folder),
+              label: '文件',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.devices_outlined),
+              selectedIcon: Icon(Icons.devices),
+              label: '连接',
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
 class _BrandBar extends StatelessWidget {
-  const _BrandBar();
+  const _BrandBar({required this.isDemo, required this.isLive});
+
+  final bool isDemo;
+  final bool isLive;
 
   @override
   Widget build(BuildContext context) {
@@ -105,13 +114,19 @@ class _BrandBar extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
               decoration: BoxDecoration(
-                color: const Color(0xFFFFF4DF),
+                color: isLive
+                    ? const Color(0xFFE8F1ED)
+                    : const Color(0xFFFFF4DF),
                 borderRadius: BorderRadius.circular(6),
               ),
-              child: const Text(
-                '本地演示',
+              child: Text(
+                isDemo
+                    ? '本地演示'
+                    : isLive
+                    ? '本机 OpenCode'
+                    : '未连接',
                 style: TextStyle(
-                  color: appAmber,
+                  color: isLive ? appGreen : appAmber,
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
                 ),

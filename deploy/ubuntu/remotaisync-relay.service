@@ -1,0 +1,24 @@
+[Unit]
+Description=RemoteAISync Relay Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=remotaisync
+Group=remotaisync
+EnvironmentFile=/etc/remotaisync-relay/relay.env
+ExecStart=/opt/remotaisync/remotaisync --mode relay --bind-address 127.0.0.1 --port ${REMOTEAI_RELAY_PORT} --data-dir /var/lib/remotaisync-relay
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/remotaisync-relay
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

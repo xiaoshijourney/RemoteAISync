@@ -1,0 +1,17 @@
+relay.example.com {
+	@admin path /admin/*
+	respond @admin "not found" 404
+
+	@relay_api path /relay /register-host /health
+	reverse_proxy @relay_api 127.0.0.1:8920
+	respond "not found" 404
+}
+
+# Optional public Agent host on the same Ubuntu server.
+# The host runtime remains loopback-only on 127.0.0.1:8910; Caddy is the
+# only public TLS entry point. Change the hostname to the user's own domain.
+host.example.com {
+	reverse_proxy /ws 127.0.0.1:8910
+	reverse_proxy /health 127.0.0.1:8910
+	respond "not found" 404
+}

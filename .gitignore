@@ -32,6 +32,27 @@ migrate_working_dir/
 .pub/
 /build/
 /coverage/
+/.remoteaisync/inbox/
+/.remoteaisync/dev-pairing-token
+/.remoteaisync/paired-devices.json
+/.remoteaisync/relay-host-credentials.json
+/.remoteaisync/relay-rooms.json
+/.remoteaisync/relay-dev-config.json
+/.codex/hooks.json
+/.codex/hooks.json.bak-*
+
+# Local credentials, deployment secrets, and debugging output
+/.tmp/
+/.agents/
+/android-debug.png
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
 
 # Symbolication related
 app.*.symbols

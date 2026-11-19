@@ -4,20 +4,127 @@ import 'dart:io';
 
 import 'package:remote_ai_sync/src/domain/models.dart';
 
+typedef OpenCodeCommandRunner =
+    Future<ProcessResult> Function({
+      required String executable,
+      required List<String> arguments,
+      required String workingDirectory,
+    });
+
+class OpenCodeServiceConnection {
+  const OpenCodeServiceConnection({
+    required this.baseUri,
+    required this.password,
+  });
+
+  final Uri baseUri;
+  final String password;
+
+  static Future<OpenCodeServiceConnection> discover({
+    required String executable,
+    required String workingDirectory,
+    OpenCodeCommandRunner? commandRunner,
+  }) async {
+    var resolvedExecutable = executable;
+    if (commandRunner == null && Platform.isWindows) {
+      try {
+        final located = await Process.run('where.exe', [executable]);
+        final first = located.stdout
+            .toString()
+            .split(RegExp(r'\r?\n'))
+            .map((line) => line.trim())
+            .firstWhere((line) => line.isNotEmpty, orElse: () => '');
+        if (located.exitCode == 0 && first.isNotEmpty) {
+          resolvedExecutable = first;
+        }
+      } on ProcessException {
+        // Fall back to normal PATH lookup.
+      }
+    }
+    Future<ProcessResult> run(List<String> arguments) =>
+        commandRunner?.call(
+          executable: executable,
+          arguments: arguments,
+          workingDirectory: workingDirectory,
+        ) ??
+        Process.run(
+          resolvedExecutable,
+          arguments,
+          workingDirectory: workingDirectory,
+        );
+
+    String? serviceUrlFromStatus(ProcessResult result) {
+      for (final line in result.stdout.toString().split(RegExp(r'\r?\n'))) {
+        final value = line.trim();
+        if (value.startsWith('http://')) return value;
+      }
+      return null;
+    }
+
+    var status = await run(['service', 'status']);
+    var serviceUrl = serviceUrlFromStatus(status);
+    if (status.exitCode != 0 || serviceUrl == null) {
+      final started = await run(['service', 'start']);
+      if (started.exitCode == 0) {
+        status = await run(['service', 'status']);
+        serviceUrl = serviceUrlFromStatus(status);
+      }
+    }
+    if (status.exitCode != 0 || serviceUrl == null) {
+      throw const OpenCodeApiException('OpenCode 后台服务未运行，请先在电脑上打开 OpenCode。');
+    }
+    final baseUri = Uri.tryParse(serviceUrl);
+    if (baseUri == null || !_isLoopback(baseUri.host)) {
+      throw const OpenCodeApiException('无法安全定位 OpenCode 本机服务。');
+    }
+
+    final state = await run(['debug', 'paths', 'state']);
+    final statePath = state.stdout.toString().trim();
+    if (state.exitCode != 0 || statePath.isEmpty) {
+      throw const OpenCodeApiException('无法读取 OpenCode 服务配置位置。');
+    }
+    final serviceFile = File(
+      '${Directory(statePath).path}${Platform.pathSeparator}service.json',
+    );
+    if (!await serviceFile.exists()) {
+      throw const OpenCodeApiException('OpenCode 本机服务配置不存在。');
+    }
+    final serviceData = jsonDecode(await serviceFile.readAsString());
+    if (serviceData is! Map) {
+      throw const OpenCodeApiException('OpenCode 本机服务配置格式无效。');
+    }
+    final configuredUrl = Uri.tryParse(serviceData['url']?.toString() ?? '');
+    final password = serviceData['password']?.toString() ?? '';
+    if (configuredUrl == null ||
+        configuredUrl.host != baseUri.host ||
+        configuredUrl.port != baseUri.port ||
+        password.isEmpty) {
+      throw const OpenCodeApiException('OpenCode 本机服务配置已过期。');
+    }
+    return OpenCodeServiceConnection(baseUri: baseUri, password: password);
+  }
+}
+
 class OpenCodeApi {
   OpenCodeApi({
     required this.baseUri,
     required String password,
     required this.projectDirectory,
+    this.executable = 'opencode',
+    this.commandRunner,
     HttpClient? httpClient,
   }) : _httpClient = httpClient ?? HttpClient() {
     _authorization = 'Basic ${base64Encode(utf8.encode('opencode:$password'))}';
   }
 
   final Uri baseUri;
-  final String projectDirectory;
+  String projectDirectory;
+  final String executable;
+  final OpenCodeCommandRunner? commandRunner;
   final HttpClient _httpClient;
   late final String _authorization;
+
+  void setProjectDirectory(String directory) => projectDirectory = directory;
 
   Future<String> version() async {
     final body = _asMap(await _request('GET', '/api/info'));
@@ -28,11 +135,15 @@ class OpenCodeApi {
     return version;
   }
 
-  Future<List<OpenCodeSession>> listSessions({int limit = 50}) async {
+  Future<List<OpenCodeSession>> listSessions({
+    int? limit,
+    String? directory,
+    bool global = false,
+  }) async {
     final query = <String, String>{
-      'limit': '$limit',
+      'limit': '${limit ?? (global ? 1000 : 50)}',
       'order': 'desc',
-      'directory': projectDirectory,
+      if (!global) 'directory': directory ?? projectDirectory,
     };
     final body = await _request(
       'GET',
@@ -45,13 +156,106 @@ class OpenCodeApi {
         .toList(growable: false);
   }
 
-  Future<List<AgentMessage>> listMessages(String sessionId) async {
+  Future<OpenCodeSession> createSession({
+    String? title,
+    String? directory,
+  }) async {
+    final workingDirectory = directory ?? projectDirectory;
+    final location = <String, Object?>{'directory': workingDirectory};
+    final body = _asMap(
+      await _request(
+        'POST',
+        _withDirectory('/api/session', directory: workingDirectory),
+        body: {'location': location, 'title': ?title},
+      ),
+    );
+    final session = OpenCodeSession.fromJson(body);
+    if (session.id.isEmpty) {
+      throw const OpenCodeApiException('OpenCode 未返回新会话 ID。');
+    }
+    return session;
+  }
+
+  Future<CodexControls> listControls() async {
+    final config = _asMap(await _request('GET', '/config/providers'));
+    final providers = config['providers'] is List
+        ? (config['providers'] as List).whereType<Map>()
+        : const <Map>[];
+    final defaults = config['default'] is Map
+        ? config['default'] as Map
+        : const <Object?, Object?>{};
+    final models = <CodexModelOption>[];
+    String? selectedModel;
+    String? selectedVariant;
+    for (final provider in providers) {
+      final providerId = provider['id']?.toString() ?? '';
+      final providerModels = provider['models'];
+      final Iterable<MapEntry<Object?, Object?>> entries;
+      if (providerModels is Map) {
+        entries = providerModels.entries.map(
+          (entry) => MapEntry<Object?, Object?>(entry.key, entry.value),
+        );
+      } else if (providerModels is List) {
+        entries = providerModels.whereType<Map>().map(
+          (model) => MapEntry<Object?, Object?>(model['id'], model),
+        );
+      } else {
+        entries = const <MapEntry<Object?, Object?>>[];
+      }
+      for (final entry in entries) {
+        final rawValue = entry.value;
+        if (rawValue is! Map) continue;
+        final rawModel = rawValue;
+        final modelId =
+            rawModel['id']?.toString() ?? entry.key?.toString() ?? '';
+        if (providerId.isEmpty || modelId.isEmpty) continue;
+        final variants = rawModel['variants'];
+        final efforts = variants is Map
+            ? variants.keys.map((value) => value.toString()).toList()
+            : const <String>[];
+        final id = '$providerId/$modelId';
+        models.add(
+          CodexModelOption(
+            id: id,
+            name: rawModel['name']?.toString() ?? modelId,
+            efforts: efforts,
+            defaultEffort: rawModel['defaultVariant']?.toString(),
+          ),
+        );
+        if (defaults[providerId]?.toString() == modelId &&
+            selectedModel == null) {
+          selectedModel = id;
+        }
+      }
+    }
+    models.sort(
+      (left, right) =>
+          left.name.toLowerCase().compareTo(right.name.toLowerCase()),
+    );
+    selectedModel ??= models.isEmpty ? null : models.first.id;
+    final chosen = models.where((model) => model.id == selectedModel);
+    if (chosen.isNotEmpty &&
+        chosen.first.efforts.contains(chosen.first.defaultEffort)) {
+      selectedVariant = chosen.first.defaultEffort;
+    }
+    return CodexControls(
+      models: models,
+      skills: const [],
+      model: selectedModel,
+      effort: selectedVariant,
+    );
+  }
+
+  Future<List<AgentMessage>> listMessages(
+    String sessionId, {
+    String? directory,
+  }) async {
     final path = '/api/session/${Uri.encodeComponent(sessionId)}/message';
     final query = Uri(
       queryParameters: {
         'limit': '100',
         'order': 'desc',
-        'directory': projectDirectory,
+        'directory': directory ?? projectDirectory,
       },
     ).query;
     final body = await _request('GET', '$path?$query');
@@ -65,11 +269,159 @@ class OpenCodeApi {
     return messages;
   }
 
-  Future<void> sendReply(String sessionId, String text) async {
+  Future<void> sendReply(
+    String sessionId,
+    String text, {
+    String? model,
+    String? variant,
+    String? directory,
+  }) async {
+    final modelParts = model?.split('/') ?? const <String>[];
     await _request(
       'POST',
-      '/api/session/${Uri.encodeComponent(sessionId)}/prompt',
-      body: {'text': text},
+      _withDirectory(
+        '/api/session/${Uri.encodeComponent(sessionId)}/prompt',
+        directory: directory,
+      ),
+      body: {
+        'text': text,
+        if (modelParts.length >= 2)
+          'model': {
+            'providerID': modelParts.first,
+            'modelID': modelParts.skip(1).join('/'),
+          },
+        if (variant != null && variant.isNotEmpty) 'variant': variant,
+      },
+    );
+  }
+
+  Future<bool> abortSession(String sessionId, {String? directory}) async {
+    final result = await _request(
+      'POST',
+      _withDirectory(
+        '/api/session/${Uri.encodeComponent(sessionId)}/abort',
+        directory: directory,
+      ),
+    );
+    return result == true;
+  }
+
+  Future<List<AgentForm>> listForms(
+    String sessionId, {
+    String? directory,
+  }) async {
+    final path = _withDirectory(
+      '/api/session/${Uri.encodeComponent(sessionId)}/form',
+      directory: directory,
+    );
+    final forms = _asList(await _request('GET', path));
+    return forms
+        .whereType<Map>()
+        .where((item) {
+          final state = item['state'];
+          return state is! Map || state['status'] == 'pending';
+        })
+        .map(AgentForm.fromJson)
+        .where((form) => form.id.isNotEmpty && form.sessionId == sessionId)
+        .toList(growable: false);
+  }
+
+  Future<void> replyToForm(
+    String sessionId,
+    String formId,
+    Map<String, Object?> answer, {
+    String? directory,
+  }) async {
+    await _request(
+      'POST',
+      _withDirectory(
+        '/api/session/${Uri.encodeComponent(sessionId)}/form/${Uri.encodeComponent(formId)}/reply',
+        directory: directory,
+      ),
+      body: {'answer': answer},
+    );
+  }
+
+  Future<List<AgentPermission>> listPermissions(
+    String sessionId, {
+    String? directory,
+  }) async {
+    final path = _withDirectory(
+      '/api/session/${Uri.encodeComponent(sessionId)}/permission',
+      directory: directory,
+    );
+    return _asList(await _request('GET', path))
+        .whereType<Map>()
+        .map(AgentPermission.fromJson)
+        .where(
+          (permission) =>
+              permission.id.isNotEmpty && permission.sessionId == sessionId,
+        )
+        .toList(growable: false);
+  }
+
+  Future<void> createForm(
+    String sessionId, {
+    required String title,
+    required List<Map<String, Object?>> fields,
+  }) async {
+    await _request(
+      'POST',
+      _withDirectory('/api/session/${Uri.encodeComponent(sessionId)}/form'),
+      body: {'title': title, 'fields': fields},
+    );
+  }
+
+  Future<void> updateSessionPermissions(
+    String sessionId,
+    List<Map<String, Object?>> permissions,
+  ) async {
+    await _request(
+      'PATCH',
+      _withDirectory('/api/session/${Uri.encodeComponent(sessionId)}'),
+      body: {'permissions': permissions},
+    );
+  }
+
+  Future<void> createPermissionRequest(
+    String sessionId, {
+    required String action,
+    required List<String> resources,
+    required String toolId,
+  }) async {
+    await _request(
+      'POST',
+      _withDirectory(
+        '/api/session/${Uri.encodeComponent(sessionId)}/permission',
+      ),
+      body: {
+        'action': action,
+        'resources': resources,
+        'source': {
+          'type': 'tool',
+          'messageID': 'msg_remoteaisync_test',
+          'id': toolId,
+        },
+      },
+    );
+  }
+
+  Future<void> replyToPermission(
+    String sessionId,
+    String requestId, {
+    required String decision,
+    String? directory,
+  }) async {
+    if (decision != 'once' && decision != 'always' && decision != 'reject') {
+      throw const OpenCodeApiException('不支持的工具审批决定。');
+    }
+    await _request(
+      'POST',
+      _withDirectory(
+        '/api/session/${Uri.encodeComponent(sessionId)}/permission/${Uri.encodeComponent(requestId)}/reply',
+        directory: directory,
+      ),
+      body: {'decision': decision},
     );
   }
 
@@ -105,6 +457,13 @@ class OpenCodeApi {
     _httpClient.close(force: true);
   }
 
+  String _withDirectory(String path, {String? directory}) {
+    final query = Uri(
+      queryParameters: {'directory': directory ?? projectDirectory},
+    ).query;
+    return '$path?$query';
+  }
+
   Future<Object?> _request(String method, String path, {Object? body}) async {
     final request = await _httpClient.openUrl(method, baseUri.resolve(path));
     request.headers.set(HttpHeaders.authorizationHeader, _authorization);
@@ -119,11 +478,17 @@ class OpenCodeApi {
         'OpenCode API returned HTTP ${response.statusCode}.',
       );
     }
-    if (content.isEmpty) return null;
+    final payload = content.replaceFirst('\uFEFF', '').trim();
+    if (payload.isEmpty) return null;
     try {
-      return jsonDecode(content);
+      return jsonDecode(payload);
     } on FormatException {
-      throw const OpenCodeApiException('OpenCode returned invalid JSON.');
+      final contentType = response.headers.contentType?.mimeType ?? 'unknown';
+      throw OpenCodeApiException(
+        'OpenCode $method $path returned a non-JSON response '
+        '(HTTP ${response.statusCode}, $contentType, ${payload.length} characters). '
+        'Check that the local OpenCode server API is compatible and running.',
+      );
     }
   }
 
@@ -146,6 +511,11 @@ class OpenCodeApi {
   }
 }
 
+bool _isLoopback(String host) {
+  if (host.toLowerCase() == 'localhost') return true;
+  return InternetAddress.tryParse(host)?.isLoopback ?? false;
+}
+
 class OpenCodeApiException implements Exception {
   const OpenCodeApiException(this.message);
 
@@ -160,27 +530,34 @@ class OpenCodeSession {
     required this.id,
     required this.title,
     required this.updatedAt,
+    this.directory,
   });
 
   final String id;
   final String title;
   final String updatedAt;
+  final String? directory;
 
   Map<String, Object?> toJson() => {
     'id': id,
     'title': title,
     'updatedAt': updatedAt,
+    if (directory != null) 'directory': directory,
   };
 
   factory OpenCodeSession.fromJson(Map<String, dynamic> json) {
     final time = json['time'];
     final updated = time is Map ? time['updated'] : null;
+    final location = json['location'];
     return OpenCodeSession(
       id: json['id']?.toString() ?? '',
       title: json['title']?.toString().trim().isNotEmpty == true
           ? json['title'].toString()
           : '未命名会话',
       updatedAt: _formatTime(updated),
+      directory:
+          json['directory']?.toString() ??
+          (location is Map ? location['directory']?.toString() : null),
     );
   }
 
@@ -227,6 +604,7 @@ class OpenCodeSession {
               author: author,
               text: text,
               time: time,
+              groupId: messageId,
             ),
           );
         }
@@ -237,6 +615,7 @@ class OpenCodeSession {
             author: MessageAuthor.tool,
             text: _toolSummary(part),
             time: time,
+            groupId: messageId,
           ),
         );
       }

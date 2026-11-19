@@ -1,19 +1,23 @@
 import 'package:flutter/foundation.dart';
+import 'package:file_selector/file_selector.dart';
 
 import 'host_client.dart';
 import '../domain/models.dart';
+import '../domain/transport_protocol.dart';
 
 class DemoController extends ChangeNotifier {
-  DemoController() {
-    host.addListener(notifyListeners);
+  DemoController({bool demo = true}) : _demoMode = demo {
+    host.addListener(_notify);
   }
 
   final HostClient host = HostClient();
+  bool _disposed = false;
   final List<AgentMessage> _messages = [
     const AgentMessage(
       id: 'm1',
       author: MessageAuthor.assistant,
-      text: '参数解析和页面代码已经完成。我准备启动本地预览，检查移动端布局。',
+      text:
+          '参数解析和页面代码已经完成。我准备启动本地预览，检查移动端布局。\n\n```shell\nflutter run -d web-server --web-port 4173\n```',
       time: '14:32',
     ),
     const AgentMessage(
@@ -41,31 +45,75 @@ class DemoController extends ChangeNotifier {
 
   int _nextMessageId = 4;
   String? _selectedPort;
-  bool _demoMode = true;
+  bool _demoMode;
+  AttachmentTransferState _attachmentState = AttachmentTransferState.delivered;
+  bool _lastReplyWasQueued = false;
 
   List<AgentMessage> get messages =>
       _demoMode ? List.unmodifiable(_messages) : host.messages;
   List<HostSession> get sessions => host.sessions;
+  List<AgentForm> get forms => isLive ? host.forms : const [];
+  List<AgentPermission> get permissions => isLive ? host.permissions : const [];
+  List<AgentQueuedMessage> get queuedMessages =>
+      isLive ? host.queuedMessages : const [];
+  String? get queueWarning => isLive ? host.queueWarning : null;
   String? get selectedSessionId => host.selectedSessionId;
+  bool get sessionLoaded => host.sessionLoaded;
   String? get connectionError => host.errorMessage;
   String? get hostVersion => host.hostVersion;
+  String? get codexVersion => host.codexVersion;
+  String? get workspaceDirectory => host.workspaceDirectory;
+  bool get allSessionsScope => host.allSessionsScope;
+  Map<String, AgentRuntimeStatus> get agentStatuses => host.agentStatuses;
+  AgentRuntimeStatus? agentStatus(String id) => host.agentStatus(id);
+  TopologySnapshot get topology => host.topology;
+  int? get connectedClientCount => host.connectedClientCount;
   HostConnectionStatus get connectionStatus => host.status;
+  TransportState get transportState => host.transportState;
+  PairingState get pairingState => host.pairingState;
+  String? get connectionRoute => host.connectionRoute;
   bool get isLive => host.status == HostConnectionStatus.connected;
   bool get isDemo => _demoMode;
+  HostSession? get selectedSession => host.selectedSession;
+  AgentCapabilityProfile? get selectedCapabilities => host.selectedCapabilities;
+
+  SessionRunState get selectedSessionState {
+    if (!isLive || selectedSession == null) return SessionRunState.stale;
+    if (forms.isNotEmpty) return SessionRunState.waitingInput;
+    if (permissions.isNotEmpty) return SessionRunState.waitingApproval;
+    if (queuedMessages.isNotEmpty) return SessionRunState.queued;
+    if (!sessionLoaded) return SessionRunState.loading;
+    return SessionRunState.idle;
+  }
+
   ToolApproval get approval => _approval;
   String? get selectedPort => _selectedPort;
+  AttachmentTransferState get attachmentState => _attachmentState;
+  bool get lastReplyWasQueued => _lastReplyWasQueued;
 
   Future<void> connect({
     required String address,
     required String pairingToken,
-    int port = 8787,
+    int port = 8910,
+    String? directUrl,
+    String? relayUrl,
+    String? relayRoom,
+    String? relayToken,
+    List<String> lanAddresses = const [],
+    bool forceRelay = false,
   }) {
     _demoMode = false;
-    notifyListeners();
+    _notify();
     return host.connect(
       address: address,
       port: port,
       pairingToken: pairingToken,
+      directUrl: directUrl,
+      relayUrl: relayUrl,
+      relayRoom: relayRoom,
+      relayToken: relayToken,
+      lanAddresses: lanAddresses,
+      forceRelay: forceRelay,
     );
   }
 
@@ -74,25 +122,111 @@ class DemoController extends ChangeNotifier {
   Future<void> selectSession(HostSession session) =>
       host.selectSession(session);
 
+  Future<void> refreshSessions() => host.refreshSessions();
+
+  Future<void> refreshSelectedSession() => host.refreshSelectedSession();
+
+  Future<void> createCodexSession() => host.createCodexSession();
+  Future<void> createAgentSession(
+    String agentId, {
+    String? directory,
+    bool ephemeral = false,
+    bool useDefaultDirectory = false,
+  }) => host.createAgentSession(
+    agentId,
+    directory: directory,
+    ephemeral: ephemeral,
+    useDefaultDirectory: useDefaultDirectory,
+  );
+
+  Future<List<HostFileEntry>> listWorkspace([String? path]) =>
+      host.listWorkspace(path);
+  Future<WorkspaceFileContent> readWorkspaceFile(String path) =>
+      host.readWorkspaceFile(path);
+  Future<void> writeWorkspaceFile(String path, String content) =>
+      host.writeWorkspaceFile(path, content);
+  Future<WorkspaceFileDownload> downloadWorkspaceFile(String path) =>
+      host.downloadWorkspaceFile(path);
+  Future<void> deleteWorkspaceFile(String path) =>
+      host.deleteWorkspaceFile(path);
+  Future<void> createWorkspaceDirectory(String parent, String name) =>
+      host.createWorkspaceDirectory(parent, name);
+  Future<void> selectWorkspace(String path, {bool allSessions = false}) =>
+      host.selectWorkspace(path, allSessions: allSessions);
+  Future<CodexControls> loadCodexControls() => host.loadCodexControls();
+  Future<void> updateCodexSettings({
+    required String model,
+    required String effort,
+  }) => host.updateCodexSettings(model: model, effort: effort);
+
+  Future<void> updateClaudeSettings({
+    required String model,
+    required String effort,
+  }) => host.updateClaudeSettings(model: model, effort: effort);
+  Future<void> interruptCodex() => host.interruptCodex();
+  Future<void> interruptSelectedSession() => host.interruptSelectedSession();
+  Future<void> runCodexAction(String action) => host.runCodexAction(action);
+
+  Future<void> withdrawQueuedMessage(
+    AgentQueuedMessage queued, {
+    String? expectedSessionId,
+  }) =>
+      host.withdrawQueuedMessage(queued, expectedSessionId: expectedSessionId);
+
+  Future<void> replyToForm(AgentForm form, Map<String, Object?> answer) =>
+      host.replyToForm(form, answer);
+
+  Future<void> replyToPermission(
+    AgentPermission permission, {
+    required bool allow,
+  }) => host.replyToPermission(permission, allow: allow);
+
   Future<String?> sendReply(
     String rawText, {
     List<AgentAttachment> attachments = const [],
+    List<XFile> files = const [],
+    String? model,
+    String? effort,
   }) async {
     final text = rawText.trim();
     if (text.isEmpty && attachments.isEmpty) return null;
     if (!isDemo && !isLive) {
       return connectionError ?? '请先连接电脑主机，再发送消息。';
     }
+    _lastReplyWasQueued = false;
     if (isLive) {
-      if (attachments.isNotEmpty) {
-        return '当前主机连接尚未启用附件上传，请先移除附件。';
+      if (attachments.length != files.length) {
+        return '所选文件信息不完整，请重新选择附件。';
       }
-      if (text.isNotEmpty) {
-        try {
-          await host.sendReply(text);
-        } catch (error) {
-          return error.toString().replaceFirst('Bad state: ', '');
+      try {
+        if (files.isNotEmpty) {
+          _attachmentState = AttachmentTransferState.uploading;
+          _notify();
         }
+        final targetSessionId = host.selectedSessionId;
+        final attachmentIds = <String>[];
+        for (final file in files) {
+          attachmentIds.add(await host.uploadAttachment(file));
+        }
+        if (files.isNotEmpty) {
+          _attachmentState = AttachmentTransferState.uploaded;
+          _notify();
+        }
+        _attachmentState = AttachmentTransferState.sending;
+        _notify();
+        _lastReplyWasQueued = await host.sendReply(
+          text,
+          attachmentIds: attachmentIds,
+          expectedSessionId: targetSessionId,
+          model: model,
+          effort: effort,
+        );
+        _attachmentState = AttachmentTransferState.delivered;
+        _notify();
+      } catch (error) {
+        _attachmentState = AttachmentTransferState.failed;
+        _notify();
+        return error.toString().replaceFirst('Bad state: ', '');
       }
       return null;
     }
@@ -116,7 +250,7 @@ class DemoController extends ChangeNotifier {
         time: _timeNow(),
       ),
     );
-    notifyListeners();
+    _notify();
     return null;
   }
 
@@ -131,7 +265,7 @@ class DemoController extends ChangeNotifier {
         time: _timeNow(),
       ),
     );
-    notifyListeners();
+    _notify();
   }
 
   void resolveApproval({required bool allow}) {
@@ -148,7 +282,7 @@ class DemoController extends ChangeNotifier {
         time: _timeNow(),
       ),
     );
-    notifyListeners();
+    _notify();
   }
 
   String _timeNow() {
@@ -156,9 +290,14 @@ class DemoController extends ChangeNotifier {
     return '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
   }
 
+  void _notify() {
+    if (!_disposed) notifyListeners();
+  }
+
   @override
   void dispose() {
-    host.removeListener(notifyListeners);
+    _disposed = true;
+    host.removeListener(_notify);
     host.dispose();
     super.dispose();
   }

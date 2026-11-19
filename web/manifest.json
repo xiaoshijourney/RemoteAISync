@@ -1,6 +1,6 @@
 {
-    "name": "RemoteAISync",
-    "short_name": "RemoteAISync",
+    "name": "RAS",
+    "short_name": "RAS",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#F5F7F5",

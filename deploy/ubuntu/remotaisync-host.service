@@ -1,0 +1,25 @@
+[Unit]
+Description=RemoteAISync Agent Host
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=remotaisync-host
+Group=remotaisync-host
+EnvironmentFile=/etc/remotaisync-host/host.env
+WorkingDirectory=${REMOTEAI_HOST_PROJECT}
+ExecStart=/opt/remotaisync/remotaisync --mode host --project ${REMOTEAI_HOST_PROJECT} --bind-address 127.0.0.1 --port ${REMOTEAI_HOST_PORT} --token ${REMOTEAI_HOST_PAIRING_TOKEN} --persist-token --allow-public-host --public-host-url ${REMOTEAI_HOST_PUBLIC_URL} --allowed-origin ${REMOTEAI_HOST_ALLOWED_ORIGIN} --opencode ${REMOTEAI_HOST_OPENCODE} --codex ${REMOTEAI_HOST_CODEX} --claude ${REMOTEAI_HOST_CLAUDE}
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=${REMOTEAI_HOST_PROJECT}
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

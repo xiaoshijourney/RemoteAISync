@@ -43,6 +43,8 @@ Options:
     return;
   }
 
+  await _checkUbuntuUpdate(options.mode);
+
   if (options.issueRegistrationCode || options.revokeRegistrationCode != null) {
     await _runRelayAdminCommand(options);
     return;
@@ -175,6 +177,67 @@ Options:
   await _waitForStop(stopSignal: stopped.future);
   await relayConnector?.close();
   await bridge.close();
+}
+
+Future<void> _checkUbuntuUpdate(String mode) async {
+  if (!Platform.isLinux) return;
+  final product = mode == 'relay' ? 'relay' : 'host';
+  final client = HttpClient()..connectionTimeout = const Duration(seconds: 4);
+  try {
+    final request = await client
+        .getUrl(
+          Uri.https(
+            'ras.xiaoshijourney.com',
+            '/api/v1/updates/$product/ubuntu/latest',
+          ),
+        )
+        .timeout(const Duration(seconds: 4));
+    final response = await request.close().timeout(const Duration(seconds: 4));
+    if (response.statusCode != HttpStatus.ok) {
+      await response.drain<void>();
+      return;
+    }
+    final update = jsonDecode(await response.transform(utf8.decoder).join());
+    if (update is Map<String, dynamic>) {
+      final latest = update['version'] as String? ?? '';
+      final build = int.tryParse(update['build']?.toString() ?? '') ?? 0;
+      if (_compareVersions(latest, '1.0.0') > 0 ||
+          (_compareVersions(latest, '1.0.0') == 0 && build > 1)) {
+        stdout.writeln(
+          'RemoteAISync $latest is available for $product (current runtime: 1.0.0).',
+        );
+        final downloadPath = update['downloadUrl'] as String?;
+        if (downloadPath != null) {
+          stdout.writeln(
+            'Download: ${Uri.https('ras.xiaoshijourney.com').resolve(downloadPath)}',
+          );
+        }
+        stdout.writeln(
+          'Review notes and confirm before replacing the runtime.',
+        );
+      }
+    }
+  } on Object catch (error) {
+    stderr.writeln('Update check unavailable: $error');
+  } finally {
+    client.close(force: true);
+  }
+}
+
+int _compareVersions(String left, String right) {
+  List<int> parts(String value) => value
+      .split(RegExp(r'[+-]'))
+      .first
+      .split('.')
+      .map((part) => int.tryParse(part) ?? 0)
+      .toList();
+  final a = parts(left);
+  final b = parts(right);
+  for (var i = 0; i < 3; i++) {
+    final difference = (i < a.length ? a[i] : 0) - (i < b.length ? b[i] : 0);
+    if (difference != 0) return difference;
+  }
+  return 0;
 }
 
 Future<void> _waitForStop({

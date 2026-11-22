@@ -444,6 +444,49 @@ void main() {
       await temp.delete(recursive: true);
     }
   });
+
+  test('stops an active desktop Codex turn before sending new input', () async {
+    final temp = await Directory.systemTemp.createTemp(
+      'remoteaisync-codex-interrupt-desktop-test-',
+    );
+    final log = File('${temp.path}${Platform.pathSeparator}requests.jsonl');
+    final fixture = File('test/support/fake_codex_app_server.dart').absolute;
+    final flutterRoot = Platform.environment['FLUTTER_ROOT'];
+    final dartExecutable = flutterRoot == null
+        ? 'dart'
+        : '$flutterRoot${Platform.pathSeparator}bin${Platform.pathSeparator}cache${Platform.pathSeparator}dart-sdk${Platform.pathSeparator}bin${Platform.pathSeparator}dart.exe';
+    final process = await Process.start(dartExecutable, [
+      fixture.path,
+      log.path,
+    ], workingDirectory: Directory.current.path);
+    final api = await CodexApi.attach(
+      process,
+      projectDirectory: Directory.current.path,
+      version: 'codex-cli test',
+    );
+    try {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      final queuedId = await api.sendDesktopMessage(
+        'codex:interruptible-desktop-thread',
+        'Replace the current request',
+      );
+      expect(queuedId, isNull);
+      final methods = log
+          .readAsLinesSync()
+          .map((line) => jsonDecode(line) as Map<String, dynamic>)
+          .where(
+            (frame) =>
+                (frame['params'] as Map?)?['threadId'] ==
+                'interruptible-desktop-thread',
+          )
+          .map((frame) => frame['method'])
+          .toList();
+      expect(methods, ['turn/interrupt', 'thread/resume', 'turn/start']);
+    } finally {
+      await api.close();
+      await temp.delete(recursive: true);
+    }
+  });
 }
 
 Future<void> _waitFor(bool Function() condition) async {

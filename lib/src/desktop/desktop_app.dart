@@ -9,6 +9,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../domain/models.dart';
 import '../domain/transport_protocol.dart';
 import '../presentation/components/agent_brand_mark.dart';
+import '../presentation/components/update_check_card.dart';
 import '../presentation/shad_theme.dart';
 import 'host_service_manager.dart';
 
@@ -1586,6 +1587,14 @@ class _SettingsPanelState extends State<_SettingsPanel> {
         children: [
           Text('设置', style: Theme.of(context).textTheme.headlineSmall),
           const SizedBox(height: 6),
+          SizedBox(
+            width: width,
+            child: UpdateCheckCard(
+              product: manager.mode == HostRuntimeMode.host ? 'host' : 'relay',
+              target: 'windows',
+              currentVersion: '1.0.0',
+            ),
+          ),
           const SizedBox(height: 18),
           SizedBox(
             width: width,

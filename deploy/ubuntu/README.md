@@ -7,9 +7,9 @@ required WebSocket and health paths to the local Dart process.
 ## Requirements
 
 - Ubuntu 22.04 or newer.
-- A DNS `A` record for `relay.example.com` pointing to this server when
-  relay mode is used. Add `host.example.com` when this server also runs
-  Agent host mode. Add `AAAA` records only when IPv6 is configured end to end.
+- DNS `A` records for the public names you use. This deployment's relay
+  endpoint is `remoteaisync.xiaoshijourney.com`. Add `AAAA` records only when
+  IPv6 is configured end to end.
 - Inbound TCP 80 and 443 for Caddy. Keep TCP 8910 and 8920 private to
   loopback; do not open either port in the cloud firewall.
 - Dart SDK on the build machine. The server itself does not need Dart when using the compiled executable.
@@ -48,11 +48,11 @@ Install Caddy using its official Ubuntu package instructions, then install this 
 
 ```bash
 sudo systemctl reload caddy
-curl --fail https://relay.example.com/health
+curl --fail https://remoteaisync.xiaoshijourney.com/health
 ```
 
 Caddy obtains and renews a publicly trusted TLS certificate. The Windows
-host and mobile client use `wss://relay.example.com`; they do not need a
+host and mobile client use `wss://remoteaisync.xiaoshijourney.com`; they do not need a
 separately installed CA certificate. Caddy denies `/admin/*` at the public
 edge. The relay's admin endpoint is for local commands only.
 
@@ -78,8 +78,8 @@ Edit `/etc/remotaisync-host/host.env`:
 ```text
 REMOTEAI_HOST_PROJECT=/var/lib/remotaisync-host/project
 REMOTEAI_HOST_PORT=8910
-REMOTEAI_HOST_PUBLIC_URL=wss://host.example.com/ws
-REMOTEAI_HOST_ALLOWED_ORIGIN=https://client.example.com
+REMOTEAI_HOST_PUBLIC_URL=wss://host.<your-domain>/ws
+REMOTEAI_HOST_ALLOWED_ORIGIN=https://ras.xiaoshijourney.com
 REMOTEAI_HOST_PAIRING_TOKEN=replace-with-a-random-secret-at-least-32-characters
 REMOTEAI_HOST_OPENCODE=opencode
 REMOTEAI_HOST_CODEX=codex
@@ -114,7 +114,7 @@ curl --fail -X POST http://127.0.0.1:${REMOTEAI_HOST_PORT}/pairing/invite \
 ```
 
 For a headless host, enter the returned `invite` in the client connection
-page, use `wss://host.example.com/ws` as the public host URL, leave the
+page, use `wss://host.<your-domain>/ws` as the public host URL, leave the
 LAN host field empty, and connect. A GUI host generates the same information
 as a QR code automatically. The first connection remains pending until the
 host operator approves it through the local management endpoint or GUI:
@@ -126,7 +126,7 @@ curl --fail -X POST "http://127.0.0.1:${REMOTEAI_HOST_PORT}/pairing/approve?id=<
 ```
 
 The host GUI/client pairing QR can contain both local routes and
-`wss://host.example.com/ws`. A phone on the public internet will use
+`wss://host.<your-domain>/ws`. A phone on the public internet will use
 the WSS route directly; a phone on the same LAN can still use the LAN route
 first. The host and relay units can run on the same machine because they use
 separate loopback ports, data directories and DNS names.
@@ -134,37 +134,62 @@ separate loopback ports, data directories and DNS names.
 ## Configure Caddy for both roles
 
 Copy `deploy/ubuntu/Caddyfile` to `/etc/caddy/Caddyfile` and replace the
-example hostnames with domains you control. The template exposes only:
+hostnames with domains you control. The deployed Caddy configuration exposes:
 
 ```text
-relay.example.com/relay, /register-host, /health  -> 127.0.0.1:8920
-host.example.com/ws, /health                       -> 127.0.0.1:8910
+remoteaisync.xiaoshijourney.com/{relay,register-host,health} -> 127.0.0.1:8920
+ras.xiaoshijourney.com/app/*                               -> Flutter Web client
+ras.xiaoshijourney.com/manage/*                            -> Flutter release console
+ras.xiaoshijourney.com/api/*                               -> 127.0.0.1:8930
+ras.xiaoshijourney.com/                                    -> /var/www/ras.xiaoshijourney.com
+xiaoshijourney.com and www.xiaoshijourney.com               -> /var/www/xiaoshijourney.com
+default HTTP paths /jiya, /hs, /home                        -> their existing static roots
 ```
 
-Then reload Caddy:
+Then validate and reload Caddy:
 
 ```bash
+sudo caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 sudo systemctl reload caddy
-curl --fail https://relay.example.com/health
-curl --fail https://host.example.com/health
+curl --fail https://remoteaisync.xiaoshijourney.com/health
 ```
+
+To expose an Agent host directly over WSS, point a DNS record such as
+`host.<your-domain>` to this server and add this block to `/etc/caddy/Caddyfile`:
+
+```caddyfile
+host.<your-domain> {
+	@host_api path /ws /health
+	handle @host_api {
+		reverse_proxy 127.0.0.1:8910
+	}
+	handle {
+		respond "not found" 404
+	}
+}
+```
+
+This keeps pairing administration endpoints private while allowing the
+WebSocket and health endpoints required by remote clients. Set the same WSS
+URL in the host environment file and its pairing profile. Validate and reload
+Caddy after changing the file.
 
 Do not expose `/admin/*`, `8910`, or `8920` to the internet. WSS protects the
 endpoint-to-Caddy transport. The relay can still read application messages in
 this release because end-to-end encryption is not implemented.
 
-### Existing Nginx installation
+### Legacy Nginx configuration
 
-If the server already uses Nginx, use `nginx-remotaisync.conf` instead of
-Caddy. Obtain a certificate for `relay.example.com` with
-Certbot, copy the file into `/etc/nginx/sites-available/remotaisync`, enable
-that site, then validate and reload:
+`nginx-remotaisync.conf` is retained only as a rollback/reference template.
+This server now uses Caddy for its public sites and TLS certificates. Do not
+enable Nginx alongside Caddy on ports 80 or 443.
+
+For an existing Nginx installation, validate the Nginx configuration before
+reloading it:
 
 ```bash
-sudo ln -s /etc/nginx/sites-available/remotaisync /etc/nginx/sites-enabled/remotaisync
 sudo nginx -t
 sudo systemctl reload nginx
-curl --fail https://relay.example.com/health
 ```
 
 The Nginx template forwards `/relay`, `/register-host`, and `/health` only;
@@ -181,7 +206,7 @@ set +a
 /opt/remotaisync/remotaisync --mode relay --port "$REMOTEAI_RELAY_PORT" --issue-registration-code
 ```
 
-The command prints JSON containing the one-time code, ID, and expiry. Enter the code and `wss://relay.example.com` in the Windows host GUI. The relay issues a room and separate room credentials; the phone receives only the room client credential in the host's pairing QR.
+The command prints JSON containing the one-time code, ID, and expiry. Enter the code and `wss://remoteaisync.xiaoshijourney.com` in the Windows host GUI. The relay issues a room and separate room credentials; the phone receives only the room client credential in the host's pairing QR.
 
 To revoke a code before it is used:
 
@@ -195,12 +220,68 @@ set +a
 ## Operations
 
 ```bash
+sudo systemctl is-active caddy remotaisync-relay
+sudo systemctl is-enabled caddy remotaisync-relay
 sudo systemctl restart remotaisync-relay
 sudo journalctl -u remotaisync-relay -f
-curl --fail https://relay.example.com/health
+curl --fail https://remoteaisync.xiaoshijourney.com/health
 ```
 
 The health endpoint reports live room, host, and client counts. The relay forwards RemoteAISync messages and can read their contents; WSS encrypts traffic between each endpoint and Caddy, but this release does not provide end-to-end encryption. Do not expose `/admin/*` or the loopback listener through another proxy or firewall rule.
+
+## Release management and update catalog
+
+The product site serves the public Web client at `https://ras.xiaoshijourney.com/app/`
+and the password-protected release console at `https://ras.xiaoshijourney.com/manage/`.
+Both are static Flutter Web builds. The update API listens only on `127.0.0.1:8930`;
+Caddy proxies `/api/*` to it and does not expose the artifact storage directory.
+
+Build the client, release portal and Linux update service on a machine with Flutter
+and Dart installed:
+
+```bash
+deploy/ubuntu/build_web_portals.sh
+deploy/ubuntu/build_updates.sh
+```
+
+Copy `dist/web/app` and `dist/web/manage` into `/var/www/ras.xiaoshijourney.com/app`
+and `/var/www/ras.xiaoshijourney.com/manage`. Install the compiled updater binary
+as `/opt/remotaisync/remotaisync-updates`, then install and enable the unit:
+
+```bash
+sudo install -d -o root -g root -m 0755 /var/www/ras.xiaoshijourney.com/{app,manage}
+sudo install -d -o root -g root -m 0755 /opt/remotaisync
+sudo install -d -o remotaisync -g remotaisync -m 0750 /var/lib/remotaisync-updates
+sudo install -m 0755 dist/linux/remotaisync-updates /opt/remotaisync/remotaisync-updates
+sudo install -m 0644 deploy/ubuntu/remotaisync-updates.service /etc/systemd/system/remotaisync-updates.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now remotaisync-updates
+sudo caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+sudo systemctl reload caddy
+```
+
+Initialize the single administrator password interactively. Use at least 12
+characters and store it in your password manager:
+
+```bash
+sudo -u remotaisync /opt/remotaisync/remotaisync-updates --init-admin --data-dir /var/lib/remotaisync-updates
+```
+
+Log in at `/manage/`, select product and platform, upload the finished artifact,
+verify its SHA-256, version, build and notes, then explicitly publish it. Publishing
+makes it available from `/api/v1/updates/{product}/{target}/latest`; withdrawing it
+removes it from the public update feed. Publishing a prior withdrawn release rolls
+back the feed. Uploads are limited to 2 GiB per artifact. Back up
+`/var/lib/remotaisync-updates` securely; it contains the password hash, release
+metadata and installable files.
+
+Android updates open the APK download only after user confirmation. Android package
+updates require the same signing key as the installed app; this repository currently
+uses a debug key, so the first release signing key must be fixed before distributing
+an APK that should update in place. Windows and Ubuntu binaries are downloaded for
+manual installation/replacement; this version does not silently replace running
+programs. The Ubuntu host/relay runtime checks the catalog at startup and logs a
+notice when a newer role-specific build is published.
 
 Native WSS is also available when a deployment cannot use Caddy. Set
 `REMOTEAI_TLS_CERT` and `REMOTEAI_TLS_KEY` in the relevant environment file

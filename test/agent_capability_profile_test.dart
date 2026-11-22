@@ -23,15 +23,16 @@ void main() {
       expect(profile.canAnswerForms, isTrue);
     });
 
-    test('Codex desktop history is queue-only', () {
+    test('Codex desktop history can stop before sending', () {
       final profile = AgentCapabilityProfile.forSession(session('codex'));
 
       expect(profile.canCreate, isFalse);
       expect(profile.canReply, isTrue);
-      expect(profile.canInterrupt, isFalse);
+      expect(profile.canInterrupt, isTrue);
       expect(profile.canChangeSettings, isFalse);
       expect(profile.canApprove, isFalse);
       expect(profile.delivery, '桌面会话队列');
+      expect(profile.note, contains('停止当前回复'));
     });
 
     test('RemoteAISync owned Codex session exposes controls', () {

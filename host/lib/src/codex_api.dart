@@ -194,6 +194,42 @@ class CodexApi {
     await _request('turn/interrupt', {'threadId': threadId, 'turnId': turnId});
   }
 
+  /// Interrupts a running turn when one is known. Desktop-owned threads can
+  /// expose an active turn through app-server events even though their writer
+  /// is owned by the Codex desktop process. Returning false means there was
+  /// nothing to interrupt and is intentionally not an error.
+  Future<bool> interruptIfRunning(String sessionId) async {
+    final threadId = _threadId(sessionId);
+    final turnId = _activeTurns[threadId];
+    if (turnId == null) return false;
+    try {
+      await _request('turn/interrupt', {
+        'threadId': threadId,
+        'turnId': turnId,
+      });
+    } on CodexApiException catch (error) {
+      if (_isNoActiveTurnError(error.message)) {
+        if (_activeTurns[threadId] == turnId) _activeTurns.remove(threadId);
+        return false;
+      }
+      rethrow;
+    }
+
+    // The interrupt response can arrive before turn/completed. Wait briefly
+    // so the following message does not immediately race the desktop writer.
+    final deadline = DateTime.now().add(const Duration(seconds: 3));
+    while (_activeTurns[threadId] == turnId &&
+        DateTime.now().isBefore(deadline)) {
+      try {
+        await _events.stream.first.timeout(const Duration(milliseconds: 200));
+      } on TimeoutException {
+        // Keep polling until the completion event arrives or the grace period
+        // expires. sendDesktopMessage still falls back to the queue if needed.
+      }
+    }
+    return true;
+  }
+
   Future<void> compact(String sessionId) async {
     final threadId = _threadId(sessionId);
     await _ensureThreadLoaded(threadId);
@@ -919,23 +955,41 @@ class CodexApi {
     List<String> localImages = const [],
     String? directory,
   }) async {
-    try {
-      await sendReply(
-        sessionId,
-        text,
-        localImages: localImages,
-        directory: directory,
-      );
-      return null;
-    } on CodexApiException catch (error) {
-      if (!error.activeWriter) rethrow;
-      return queueDesktopMessage(
-        sessionId,
-        text,
-        localImages: localImages,
-        directory: directory,
-      );
+    final interrupted = await interruptIfRunning(sessionId);
+    final deadline = DateTime.now().add(
+      Duration(milliseconds: interrupted ? 2500 : 0),
+    );
+    while (true) {
+      try {
+        await sendReply(
+          sessionId,
+          text,
+          localImages: localImages,
+          directory: directory,
+        );
+        return null;
+      } on CodexApiException catch (error) {
+        if (!error.activeWriter) rethrow;
+        if (DateTime.now().isBefore(deadline)) {
+          await Future<void>.delayed(const Duration(milliseconds: 250));
+          continue;
+        }
+        return queueDesktopMessage(
+          sessionId,
+          text,
+          localImages: localImages,
+          directory: directory,
+        );
+      }
     }
+  }
+
+  bool _isNoActiveTurnError(String message) {
+    final normalized = message.toLowerCase();
+    return normalized.contains('no active turn') ||
+        normalized.contains('turn not found') ||
+        normalized.contains('no running turn') ||
+        normalized.contains('already completed');
   }
 
   Future<List<AgentQueuedMessage>> listQueuedMessages(String sessionId) async {

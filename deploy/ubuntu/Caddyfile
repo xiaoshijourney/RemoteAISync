@@ -1,17 +1,97 @@
-relay.example.com {
-	@admin path /admin/*
-	respond @admin "not found" 404
-
+remoteaisync.xiaoshijourney.com {
+	@admin path /admin /admin/*
+	handle @admin {
+		respond "not found" 404
+	}
 	@relay_api path /relay /register-host /health
-	reverse_proxy @relay_api 127.0.0.1:8920
-	respond "not found" 404
+	handle @relay_api {
+		reverse_proxy 127.0.0.1:8920
+	}
+	handle {
+		respond "not found" 404
+	}
 }
 
-# Optional public Agent host on the same Ubuntu server.
-# The host runtime remains loopback-only on 127.0.0.1:8910; Caddy is the
-# only public TLS entry point. Change the hostname to the user's own domain.
-host.example.com {
-	reverse_proxy /ws 127.0.0.1:8910
-	reverse_proxy /health 127.0.0.1:8910
-	respond "not found" 404
+# RemoteAISync product site.
+ras.xiaoshijourney.com {
+	root * /var/www/ras.xiaoshijourney.com
+	encode zstd gzip
+	redir /manage /manage/ 308
+	redir /app /app/ 308
+	@release_api path /api/*
+	handle @release_api {
+		reverse_proxy 127.0.0.1:8930
+	}
+	@manage path /manage /manage/*
+	handle_path @manage {
+		root * /var/www/ras.xiaoshijourney.com/manage
+		try_files {path} /index.html
+		file_server
+	}
+	@app path /app /app/*
+	handle_path @app {
+		root * /var/www/ras.xiaoshijourney.com/app
+		try_files {path} /index.html
+		file_server
+	}
+	handle {
+		file_server
+	}
+}
+
+# Existing static sites previously served by Nginx.
+xiaoshijourney.com, www.xiaoshijourney.com {
+	root * /var/www/xiaoshijourney.com
+	encode zstd gzip
+	file_server
+}
+
+# These names currently have no public DNS records. Preserve their HTTP routes
+# without triggering repeated ACME issuance attempts for unresolvable domains.
+http://hk.xiaoshijourney.com {
+	root * /var/www/xiaoshijourney.com
+	encode zstd gzip
+	file_server
+}
+
+http://hs.xiaoshijourney.com {
+	root * /var/www/hs.xiaoshijourney.com
+	encode zstd gzip
+	file_server
+}
+
+http://jiya.xiaoshijourney.com {
+	root * /var/www/jiya.xiaoshijourney.com
+	encode zstd gzip
+	file_server
+}
+
+# Preserve the default site's existing path-mounted content.
+:80 {
+	root * /var/www/html
+	@jiya path /jiya /jiya/*
+	handle @jiya {
+		uri strip_prefix /jiya
+		root * /var/www/jiya.xiaoshijourney.com
+		try_files {path} {path}/ /index.html
+		file_server
+	}
+	@hs path /hs /hs/*
+	handle @hs {
+		uri strip_prefix /hs
+		root * /var/www/hs.xiaoshijourney.com
+		try_files {path} {path}/ /index.html
+		file_server
+	}
+	@home path /home /home/*
+	handle @home {
+		uri strip_prefix /home
+		root * /var/www/xiaoshijourney.com
+		try_files {path} {path}/ /index.html
+		file_server
+	}
+	handle {
+		try_files {path} {path}/ =404
+		file_server
+	}
 }

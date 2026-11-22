@@ -566,12 +566,12 @@ class HostClient extends ChangeNotifier {
     final canInterrupt =
         session.agentId == 'opencode' ||
         (session.agentId == 'claude' && session.remoteManaged) ||
-        (session.agentId == 'codex' && session.remoteManaged);
+        session.agentId == 'codex';
     if (!canInterrupt) {
       throw StateError(
         session.agentId == 'claude'
             ? '本地 Claude Code 历史会话只能查看，请在电脑端继续。'
-            : '桌面版 Codex 原会话请在电脑端停止。',
+            : '当前会话不支持远程停止。',
       );
     }
     await _sendCommand('session.interrupt', {'sessionId': sessionId});
@@ -769,18 +769,13 @@ class HostClient extends ChangeNotifier {
           _readTopology(data['topology']);
           break;
         case 'host.ready':
-          if (_deviceId != null && _deviceToken != null) {
-            unawaited(_persistDeviceIdentity());
-          }
           _hostVersion = data['openCodeVersion']?.toString();
           _codexVersion = data['codexVersion']?.toString();
           _readHostStatus(data);
           _readTopology(data['topology']);
           _pairingState = PairingState.paired;
           _setState(status: HostConnectionStatus.connected, errorMessage: null);
-          if (_handshake case final handshake? when !handshake.isCompleted) {
-            handshake.complete();
-          }
+          unawaited(_finishReadyHandshake());
           break;
         case 'pairing.pending':
           _pairingState = PairingState.waitingApproval;
@@ -927,6 +922,15 @@ class HostClient extends ChangeNotifier {
       );
     } catch (_) {
       // Keep the current pairing usable if secure storage is unavailable.
+    }
+  }
+
+  Future<void> _finishReadyHandshake() async {
+    if (_deviceId != null && _deviceToken != null) {
+      await _persistDeviceIdentity();
+    }
+    if (_handshake case final handshake? when !handshake.isCompleted) {
+      handshake.complete();
     }
   }
 

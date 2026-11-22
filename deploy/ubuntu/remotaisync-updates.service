@@ -1,0 +1,24 @@
+[Unit]
+Description=RemoteAISync update catalog and release management API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=remotaisync
+Group=remotaisync
+Environment=REMOTEAI_UPDATES_DATA_DIR=/var/lib/remotaisync-updates
+ExecStart=/opt/remotaisync/remotaisync-updates --bind-address 127.0.0.1 --port 8930 --data-dir /var/lib/remotaisync-updates
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/remotaisync-updates
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

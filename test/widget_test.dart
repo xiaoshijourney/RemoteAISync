@@ -55,11 +55,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    for (final size in const [
-      Size(320, 568),
-      Size(360, 800),
-      Size(900, 700),
-    ]) {
+    for (final size in const [Size(320, 568), Size(360, 800), Size(900, 700)]) {
       tester.view.physicalSize = size;
       await tester.pumpWidget(RemoteAISyncApp(controller: DemoController()));
       await tester.pumpAndSettle();
@@ -81,26 +77,17 @@ void main() {
         find.byKey(const Key('disconnected-files-page')),
       );
       final emptyCardFinder = find
-          .ancestor(
-            of: find.text('尚未连接主机'),
-            matching: find.byType(ShadCard),
-          )
+          .ancestor(of: find.text('尚未连接主机'), matching: find.byType(ShadCard))
           .first;
       final emptyCard = tester.getRect(emptyCardFinder);
       expect(emptyCard.width, greaterThanOrEqualTo(filePage.width - 28));
       expect(emptyCard.height, lessThanOrEqualTo(190));
       expect((emptyCard.center.dy - filePage.center.dy).abs(), lessThan(40));
       final titleBounds = tester.getRect(
-        find.descendant(
-          of: emptyCardFinder,
-          matching: find.text('尚未连接主机'),
-        ),
+        find.descendant(of: emptyCardFinder, matching: find.text('尚未连接主机')),
       );
       final iconBounds = tester.getRect(
-        find.descendant(
-          of: emptyCardFinder,
-          matching: find.byType(Icon),
-        ).first,
+        find.descendant(of: emptyCardFinder, matching: find.byType(Icon)).first,
       );
       expect((titleBounds.center.dx - emptyCard.center.dx).abs(), lessThan(1));
       expect((iconBounds.center.dx - emptyCard.center.dx).abs(), lessThan(1));
@@ -149,12 +136,94 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('navigation-会话')), findsOneWidget);
 
+    for (final page in const ['连接', '文件', '会话']) {
+      await tester.tap(find.byKey(Key('navigation-$page')));
+      await tester.pumpAndSettle();
+    }
+    await tester.tap(find.byKey(const Key('message-composer')));
+    await tester.pump();
+
     tester.view.viewInsets = const FakeViewPadding(bottom: 300);
     await tester.pump();
 
     expect(find.byKey(const Key('navigation-会话')), findsNothing);
+    expect(find.byKey(const Key('message-composer')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'connection page scroll and controls stay active around IME resize',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(390, 844);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetViewInsets);
+
+      await tester.pumpWidget(RemoteAISyncApp(controller: DemoController()));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('navigation-连接')));
+      await tester.pumpAndSettle();
+
+      final scrollable = find
+          .descendant(
+            of: find.byKey(
+              const PageStorageKey<String>('connection-page-scroll'),
+            ),
+            matching: find.byType(Scrollable),
+          )
+          .first;
+      await tester.tap(find.byKey(const Key('connection-host')));
+      await tester.pump();
+      expect(
+        find.byKey(const PageStorageKey<String>('connection-page-scroll')),
+        findsOneWidget,
+        reason: 'connection page before keyboard resize',
+      );
+      for (final inset in const [80.0, 160.0, 240.0, 320.0]) {
+        tester.view.viewInsets = FakeViewPadding(bottom: inset);
+        await tester.pump(const Duration(milliseconds: 16));
+        expect(
+          find.byKey(const PageStorageKey<String>('connection-page-scroll')),
+          findsOneWidget,
+          reason: 'connection page with keyboard inset $inset',
+        );
+      }
+      await tester.ensureVisible(find.text('自托管中继'));
+      await tester.tap(find.text('自托管中继'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('connection-relay-url')), findsOneWidget);
+
+      tester.view.resetViewInsets();
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const PageStorageKey<String>('connection-page-scroll')),
+        findsOneWidget,
+        reason: 'connection page after keyboard resize',
+      );
+
+      await tester.drag(
+        find.byKey(const PageStorageKey<String>('connection-page-scroll')),
+        const Offset(0, -420),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester.state<ScrollableState>(scrollable).position.pixels,
+        greaterThan(0),
+      );
+
+      await tester.drag(
+        find.byKey(const PageStorageKey<String>('connection-page-scroll')),
+        const Offset(0, 600),
+      );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('局域网直连'));
+      await tester.tap(find.text('局域网直连'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('connection-host')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('tool calls are grouped and collapsed by default', (
     tester,
@@ -915,6 +984,50 @@ void main() {
     await tester.tap(find.byKey(const Key('navigation-连接')));
     await tester.pumpAndSettle();
     expect(find.text('设备配对'), findsOneWidget);
+    await tester.tap(find.text('自托管中继'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('connection-relay-url')), findsOneWidget);
+    await tester.tap(find.text('局域网直连'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('connection-host')), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('链路状态'),
+      180,
+      scrollable: find
+          .descendant(
+            of: find.byKey(
+              const PageStorageKey<String>('connection-page-scroll'),
+            ),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('链路状态'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.byKey(const Key('navigation-会话')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('navigation-连接')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const PageStorageKey<String>('connection-page-scroll')),
+      findsOneWidget,
+    );
+    await tester.scrollUntilVisible(
+      find.text('设备配对'),
+      -180,
+      scrollable: find
+          .descendant(
+            of: find.byKey(
+              const PageStorageKey<String>('connection-page-scroll'),
+            ),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('设备配对'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -992,6 +1105,8 @@ void main() {
       );
       await tester.pumpWidget(RemoteAISyncApp(controller: controller));
       await tester.pump();
+      await tester.tap(find.byKey(const Key('navigation-文件')));
+      await tester.pump(const Duration(milliseconds: 300));
       await tester.runAsync(() async {
         final deadline = DateTime.now().add(const Duration(seconds: 2));
         while (listRequests == 0 && DateTime.now().isBefore(deadline)) {
@@ -1001,6 +1116,16 @@ void main() {
       await tester.pump();
       await tester.tap(find.byKey(const Key('navigation-文件')));
       await tester.pump(const Duration(milliseconds: 300));
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('file-list-loading')),
+        120,
+        scrollable: find
+            .descendant(
+              of: find.byKey(const Key('files-page-scroll-view')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
       expect(find.byKey(const Key('file-list-loading')), findsOneWidget);
 
       await tester.tap(find.byKey(const Key('navigation-连接')));
@@ -1488,7 +1613,7 @@ void main() {
         180,
         scrollable: _messageScrollable(),
       );
-      await tester.drag(find.byType(Scrollable).first, const Offset(0, -160));
+      await tester.drag(_messageScrollable(), const Offset(0, -160));
       await tester.pumpAndSettle();
       await tester.tap(questionButton);
       await tester.pumpAndSettle();

@@ -9,23 +9,34 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import '../../application/demo_controller.dart';
+import '../../application/saved_connection_profile.dart';
 import '../../domain/models.dart';
 import '../../domain/pairing_profile.dart';
 import '../../domain/transport_protocol.dart';
 import '../components/glass_surface.dart';
+import '../components/update_check_card.dart';
 import '../shad_theme.dart';
 
 class ConnectionScreen extends StatefulWidget {
-  const ConnectionScreen({required this.controller, super.key});
+  const ConnectionScreen({
+    required this.controller,
+    this.savedConnection,
+    super.key,
+  });
 
   final DemoController controller;
+  final Future<SavedConnectionProfile?>? savedConnection;
 
   @override
   State<ConnectionScreen> createState() => _ConnectionScreenState();
 }
 
-class _ConnectionScreenState extends State<ConnectionScreen> {
+class _ConnectionScreenState extends State<ConnectionScreen>
+    with
+        AutomaticKeepAliveClientMixin<ConnectionScreen>,
+        WidgetsBindingObserver {
   static const _secureStorage = FlutterSecureStorage();
+  final _scrollController = ScrollController(keepScrollOffset: false);
   final _hostController = TextEditingController();
   final _portController = TextEditingController(text: '8910');
   final _tokenController = TextEditingController();
@@ -40,59 +51,53 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
   bool _showPairingInvite = false;
   List<String> _lanAddresses = const [];
   bool _hasSavedDeviceIdentity = false;
+  double _viewportWidth = 0;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    final views = WidgetsBinding.instance.platformDispatcher.views;
+    if (views.isNotEmpty) {
+      _viewportWidth =
+          views.first.physicalSize.width / views.first.devicePixelRatio;
+    }
     _hostController.text = '127.0.0.1';
     unawaited(_loadSavedConnection());
     unawaited(_loadLocalDevConfig());
   }
 
+  @override
+  void didChangeMetrics() {
+    final views = WidgetsBinding.instance.platformDispatcher.views;
+    if (views.isEmpty) return;
+    final view = views.first;
+    final width = view.physicalSize.width / view.devicePixelRatio;
+    if (!mounted || width == _viewportWidth) return;
+    setState(() => _viewportWidth = width);
+  }
+
   Future<void> _loadSavedConnection() async {
     try {
-      final host = await _secureStorage.read(key: 'remoteaisync.route.host');
-      final port = await _secureStorage.read(key: 'remoteaisync.route.port');
-      final lan = await _secureStorage.read(key: 'remoteaisync.route.lan');
-      final relayUrl = await _secureStorage.read(
-        key: 'remoteaisync.route.relayUrl',
-      );
-      final directUrl = await _secureStorage.read(
-        key: 'remoteaisync.route.directUrl',
-      );
-      final relayRoom = await _secureStorage.read(
-        key: 'remoteaisync.route.relayRoom',
-      );
-      final relayToken = await _secureStorage.read(
-        key: 'remoteaisync.route.relayToken',
-      );
-      final deviceId = await _secureStorage.read(key: 'remoteaisync.deviceId');
-      final forceRelay = await _secureStorage.read(
-        key: 'remoteaisync.route.forceRelay',
-      );
-      if (!mounted || host == null || port == null) return;
-      final parsedPort = int.tryParse(port);
-      if (parsedPort == null || parsedPort < 1 || parsedPort > 65535) return;
-      final decodedLan = lan == null ? const <String>[] : jsonDecode(lan);
+      final profile =
+          await (widget.savedConnection ??
+              SavedConnectionProfile.restore(widget.controller));
+      if (!mounted || profile == null) return;
       setState(() {
-        _hostController.text = host;
-        _portController.text = parsedPort.toString();
-        _directUrlController.text = directUrl ?? '';
-        _lanAddresses = decodedLan is List
-            ? decodedLan.map((value) => value.toString()).toList()
-            : const [];
-        _relayUrlController.text = relayUrl ?? '';
-        _relayRoomController.text = relayRoom ?? '';
-        _relayTokenController.text = relayToken ?? '';
+        _hostController.text = profile.host;
+        _portController.text = profile.port.toString();
+        _directUrlController.text = profile.directUrl ?? '';
+        _lanAddresses = profile.lanAddresses;
+        _relayUrlController.text = profile.relayUrl ?? '';
+        _relayRoomController.text = profile.relayRoom ?? '';
+        _relayTokenController.text = profile.relayToken ?? '';
         _relayMode = _relayUrlController.text.isNotEmpty;
-        _forceRelay = forceRelay == 'true';
-        _hasSavedDeviceIdentity = deviceId?.isNotEmpty == true;
+        _forceRelay = profile.forceRelay;
+        _hasSavedDeviceIdentity = profile.hasDeviceIdentity;
       });
-      if (_hasSavedDeviceIdentity) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted && !widget.controller.isLive) unawaited(_connect());
-        });
-      }
     } catch (_) {
       // Secure storage can be unavailable on web builds and restricted devices.
     }
@@ -179,6 +184,8 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _scrollController.dispose();
     _hostController.dispose();
     _portController.dispose();
     _tokenController.dispose();
@@ -191,360 +198,382 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
+    super.build(context);
+    final wide = _viewportWidth >= 1118;
+    final compact = _viewportWidth < 420;
+    final status = AnimatedBuilder(
       animation: widget.controller,
-      builder: (context, _) => LayoutBuilder(
-        builder: (context, constraints) {
-          final wide = constraints.maxWidth >= 860;
-          final compact = constraints.maxWidth < 420;
-          final status = _ConnectionStatus(controller: widget.controller);
-          final form = GlassSurface(
-            padding: EdgeInsets.all(compact ? 14 : 18),
-            radius: 20,
-            blur: 8,
-            shadow: false,
+      builder: (context, _) => _ConnectionStatus(controller: widget.controller),
+    );
+    final form = GlassSurface(
+      padding: EdgeInsets.all(compact ? 14 : 18),
+      radius: 20,
+      blur: 8,
+      shadow: false,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '设备配对',
+            style: compact
+                ? Theme.of(context).textTheme.titleMedium
+                : Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '扫描主机二维码，或手动填写配对信息。首次连接需在电脑端批准。',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 16),
+          ShadTabs<bool>(
+            key: const Key('connection-route-tabs'),
+            value: _relayMode,
+            gap: 0,
+            onChanged: (relayMode) => setState(() {
+              _relayMode = relayMode;
+              _forceRelay = relayMode;
+            }),
+            tabs: const [
+              ShadTab<bool>(
+                value: false,
+                content: SizedBox.shrink(),
+                leading: Icon(LucideIcons.wifi, size: 14),
+                child: Text('局域网直连'),
+              ),
+              ShadTab<bool>(
+                value: true,
+                content: SizedBox.shrink(),
+                leading: Icon(LucideIcons.network, size: 14),
+                child: Text('自托管中继'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          ShadForm(
+            key: _formKey,
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  '设备配对',
-                  style: compact
-                      ? Theme.of(context).textTheme.titleMedium
-                      : Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '扫描主机二维码，或手动填写配对信息。首次连接需在电脑端批准。',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                const SizedBox(height: 16),
-                ShadTabs<bool>(
-                  key: const Key('connection-route-tabs'),
-                  value: _relayMode,
-                  gap: 0,
-                  onChanged: (relayMode) => setState(() {
-                    _relayMode = relayMode;
-                    _forceRelay = relayMode;
-                  }),
-                  tabs: const [
-                    ShadTab<bool>(
-                      value: false,
-                      content: SizedBox.shrink(),
-                      leading: Icon(LucideIcons.wifi, size: 14),
-                      child: Text('局域网直连'),
-                    ),
-                    ShadTab<bool>(
-                      value: true,
-                      content: SizedBox.shrink(),
-                      leading: Icon(LucideIcons.network, size: 14),
-                      child: Text('自托管中继'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                ShadForm(
-                  key: _formKey,
-                  child: Column(
-                    children: [
-                      if (_relayMode) ...[
-                        ShadInputFormField(
-                          key: const Key('connection-relay-url'),
-                          id: 'relay-url',
-                          controller: _relayUrlController,
-                          keyboardType: TextInputType.url,
-                          autocorrect: false,
-                          label: const Text('中继服务器地址'),
-                          leading: const Icon(LucideIcons.globe),
-                          placeholder: const Text('wss://relay.example.com'),
-                          validator: _validateRelayUrl,
-                        ),
-                        const SizedBox(height: 12),
-                        ShadInputFormField(
-                          key: const Key('connection-relay-room'),
-                          id: 'relay-room',
-                          controller: _relayRoomController,
-                          autocorrect: false,
-                          label: const Text('房间 ID'),
-                          leading: const Icon(LucideIcons.hash),
-                          validator: (value) =>
-                              RegExp(
-                                r'^[A-Za-z0-9_-]{12,96}$',
-                              ).hasMatch(value.trim())
-                              ? null
-                              : '请输入 12–96 位房间 ID',
-                        ),
-                        const SizedBox(height: 12),
-                        ShadInputFormField(
-                          key: const Key('connection-relay-token'),
-                          id: 'relay-token',
-                          controller: _relayTokenController,
-                          obscureText: true,
-                          autocorrect: false,
-                          label: const Text('中继访问密钥'),
-                          leading: const Icon(LucideIcons.keyRound),
-                          validator: (value) =>
-                              value.trim().length < 32 ? '请输入中继配置的完整密钥' : null,
-                        ),
-                        const SizedBox(height: 12),
-                        if (widget.controller.isLive && _hasSavedDeviceIdentity)
-                          const _PairingSavedStatus()
-                        else ...[
-                          ShadInputFormField(
-                            key: const Key('connection-host-token'),
-                            id: 'host-token',
-                            controller: _tokenController,
-                            autocorrect: false,
-                            enableSuggestions: false,
-                            obscureText: !_showPairingInvite,
-                            trailing: _pairingInviteVisibilityButton(),
-                            label: const Text('电脑主机配对令牌'),
-                            leading: const Icon(LucideIcons.lockKeyhole),
-                            validator: (value) => value.trim().length < 32
-                                ? '请输入主机生成的限时配对邀请'
-                                : null,
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.only(top: 6),
-                            child: Text(
-                              '这是一次性邀请；连接成功后会自动清空，设备凭据已保存。',
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                          ),
-                        ],
-                      ] else ...[
-                        ShadInputFormField(
-                          key: const Key('connection-host'),
-                          id: 'host',
-                          controller: _hostController,
-                          keyboardType: TextInputType.url,
-                          autocorrect: false,
-                          label: const Text('主机地址'),
-                          leading: const Icon(LucideIcons.laptop),
-                          placeholder: const Text('127.0.0.1'),
-                          validator: _validateHost,
-                        ),
-                        const SizedBox(height: 12),
-                        ShadInputFormField(
-                          key: const Key('connection-port'),
-                          id: 'port',
-                          controller: _portController,
-                          keyboardType: TextInputType.number,
-                          label: const Text('端口'),
-                          leading: const Icon(LucideIcons.radio),
-                          validator: _validatePort,
-                        ),
-                        const SizedBox(height: 12),
-                        if (widget.controller.isLive && _hasSavedDeviceIdentity)
-                          const _PairingSavedStatus()
-                        else ...[
-                          ShadInputFormField(
-                            key: const Key('connection-token'),
-                            id: 'token',
-                            controller: _tokenController,
-                            autocorrect: false,
-                            enableSuggestions: false,
-                            obscureText: !_showPairingInvite,
-                            trailing: _pairingInviteVisibilityButton(),
-                            label: const Text('主机配对邀请'),
-                            leading: const Icon(LucideIcons.keyRound),
-                            validator: (value) => value.trim().length < 32
-                                ? '请输入主机生成的限时配对邀请'
-                                : null,
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.only(top: 6),
-                            child: Text(
-                              '这是一次性邀请；连接成功后会自动清空，设备凭据已保存。',
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: 12),
-                        ShadInputFormField(
-                          key: const Key('connection-direct-url'),
-                          id: 'direct-url',
-                          controller: _directUrlController,
-                          keyboardType: TextInputType.url,
-                          autocorrect: false,
-                          label: const Text('公网主机 WSS（可选）'),
-                          leading: const Icon(LucideIcons.globe2),
-                          placeholder: const Text('wss://host.example.com/ws'),
-                          validator: _validateDirectUrl,
-                        ),
-                      ],
-                    ],
+                if (_relayMode) ...[
+                  ShadInputFormField(
+                    key: const Key('connection-relay-url'),
+                    id: 'relay-url',
+                    controller: _relayUrlController,
+                    keyboardType: TextInputType.url,
+                    autocorrect: false,
+                    label: const Text('中继服务器地址'),
+                    leading: const Icon(LucideIcons.globe),
+                    placeholder: const Text('wss://relay.example.com'),
+                    validator: _validateRelayUrl,
                   ),
-                ),
-                const SizedBox(height: 14),
-                Wrap(
-                  alignment: WrapAlignment.start,
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 180),
-                      child: widget.controller.isLive
-                          ? ShadButton.outline(
-                              key: const Key('disconnect-local-host'),
-                              onPressed: _disconnect,
-                              leading: const Icon(LucideIcons.unlink),
-                              child: const Text('断开连接'),
-                            )
-                          : ShadButton(
-                              key: const Key('connect-local-host'),
-                              onPressed:
-                                  widget.controller.connectionStatus ==
-                                      HostConnectionStatus.connecting
-                                  ? null
-                                  : _connect,
-                              leading:
-                                  widget.controller.connectionStatus ==
-                                      HostConnectionStatus.connecting
-                                  ? const SizedBox(
-                                      width: 18,
-                                      child: ShadProgress(minHeight: 2),
-                                    )
-                                  : const Icon(LucideIcons.link),
-                              child: Text(
-                                widget.controller.connectionStatus ==
-                                        HostConnectionStatus.connecting
-                                    ? '正在连接'
-                                    : '连接本机主机',
-                              ),
-                            ),
-                    ),
-                    if (compact)
-                      Tooltip(
-                        message: '扫描主机配对二维码',
-                        child: SizedBox(
-                          width: 44,
-                          height: 44,
-                          child: ShadIconButton.outline(
-                            key: const Key('scan-pairing-qr'),
-                            onPressed: _scanPairingCode,
-                            icon: const Icon(LucideIcons.scanLine),
-                          ),
-                        ),
-                      ),
-                    if (!compact)
-                      ShadButton.outline(
-                        key: const Key('scan-pairing-qr'),
-                        onPressed: _scanPairingCode,
-                        leading: const Icon(LucideIcons.scanLine),
-                        child: const Text('扫描主机配对二维码'),
-                      ),
-                  ],
-                ),
-                if (_validationMessage != null) ...[
                   const SizedBox(height: 12),
-                  _ValidationResult(message: _validationMessage!),
+                  ShadInputFormField(
+                    key: const Key('connection-relay-room'),
+                    id: 'relay-room',
+                    controller: _relayRoomController,
+                    autocorrect: false,
+                    label: const Text('房间 ID'),
+                    leading: const Icon(LucideIcons.hash),
+                    validator: (value) =>
+                        RegExp(r'^[A-Za-z0-9_-]{12,96}$').hasMatch(value.trim())
+                        ? null
+                        : '请输入 12–96 位房间 ID',
+                  ),
+                  const SizedBox(height: 12),
+                  ShadInputFormField(
+                    key: const Key('connection-relay-token'),
+                    id: 'relay-token',
+                    controller: _relayTokenController,
+                    obscureText: true,
+                    autocorrect: false,
+                    label: const Text('中继访问密钥'),
+                    leading: const Icon(LucideIcons.keyRound),
+                    validator: (value) =>
+                        value.trim().length < 32 ? '请输入中继配置的完整密钥' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  if (_hasSavedDeviceIdentity)
+                    const _PairingSavedStatus()
+                  else ...[
+                    ShadInputFormField(
+                      key: const Key('connection-host-token'),
+                      id: 'host-token',
+                      controller: _tokenController,
+                      autocorrect: false,
+                      enableSuggestions: false,
+                      obscureText: !_showPairingInvite,
+                      trailing: _pairingInviteVisibilityButton(),
+                      label: const Text('电脑主机配对令牌'),
+                      leading: const Icon(LucideIcons.lockKeyhole),
+                      validator: (value) =>
+                          value.trim().length < 32 ? '请输入主机生成的限时配对邀请' : null,
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text(
+                        '这是一次性邀请；连接成功后会自动清空，设备凭据已保存。',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
+                ] else ...[
+                  ShadInputFormField(
+                    key: const Key('connection-host'),
+                    id: 'host',
+                    controller: _hostController,
+                    keyboardType: TextInputType.url,
+                    autocorrect: false,
+                    label: const Text('主机地址'),
+                    leading: const Icon(LucideIcons.laptop),
+                    placeholder: const Text('127.0.0.1'),
+                    validator: _validateHost,
+                  ),
+                  const SizedBox(height: 12),
+                  ShadInputFormField(
+                    key: const Key('connection-port'),
+                    id: 'port',
+                    controller: _portController,
+                    keyboardType: TextInputType.number,
+                    label: const Text('端口'),
+                    leading: const Icon(LucideIcons.radio),
+                    validator: _validatePort,
+                  ),
+                  const SizedBox(height: 12),
+                  if (_hasSavedDeviceIdentity)
+                    const _PairingSavedStatus()
+                  else ...[
+                    ShadInputFormField(
+                      key: const Key('connection-token'),
+                      id: 'token',
+                      controller: _tokenController,
+                      autocorrect: false,
+                      enableSuggestions: false,
+                      obscureText: !_showPairingInvite,
+                      trailing: _pairingInviteVisibilityButton(),
+                      label: const Text('主机配对邀请'),
+                      leading: const Icon(LucideIcons.keyRound),
+                      validator: (value) =>
+                          _hasSavedDeviceIdentity || value.trim().length >= 32
+                          ? null
+                          : '请输入主机生成的限时配对邀请',
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text(
+                        '这是一次性邀请；连接成功后会自动清空，设备凭据已保存。',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  ShadInputFormField(
+                    key: const Key('connection-direct-url'),
+                    id: 'direct-url',
+                    controller: _directUrlController,
+                    keyboardType: TextInputType.url,
+                    autocorrect: false,
+                    label: const Text('公网主机 WSS（可选）'),
+                    leading: const Icon(LucideIcons.globe2),
+                    placeholder: const Text('wss://host.example.com/ws'),
+                    validator: _validateDirectUrl,
+                  ),
                 ],
               ],
             ),
-          );
-          final routes = GlassSurface(
-            padding: EdgeInsets.all(compact ? 14 : 18),
-            radius: 20,
-            blur: 8,
-            shadow: false,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('连接路径', style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(height: 8),
-                _RouteRow(
-                  icon: LucideIcons.wifi,
-                  title: '局域网 / 本机直连',
-                  status: widget.controller.connectionRoute == '局域网直连'
-                      ? '当前路线'
-                      : '优先尝试',
-                  color: widget.controller.connectionRoute == '局域网直连'
-                      ? shadSuccess
-                      : shadMuted,
-                ),
-                _RouteRow(
-                  icon: LucideIcons.globe,
-                  title: 'IPv6 / 点对点直连',
-                  status: '暂不可用',
-                  color: shadMuted,
-                ),
-                _RouteRow(
-                  icon: LucideIcons.network,
-                  title: '自托管 WebSocket 中继',
-                  status: widget.controller.connectionRoute == '中继'
-                      ? '当前路线'
-                      : _relayMode
-                      ? '手动优先'
-                      : '自动兜底',
-                  color: widget.controller.connectionRoute == '中继'
-                      ? shadSuccess
-                      : shadMuted,
-                ),
-                const SizedBox(height: 14),
-                const _SecurityNote(),
-              ],
-            ),
-          );
-
-          return ListView(
-            padding: EdgeInsets.fromLTRB(
-              compact ? 14 : 18,
-              compact ? 12 : 20,
-              compact ? 14 : 18,
-              compact ? 16 : 24,
-            ),
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            alignment: WrapAlignment.start,
+            spacing: 8,
+            runSpacing: 8,
             children: [
-              if (wide)
-                Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 1120),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(flex: 6, child: form),
-                        const SizedBox(width: 18),
-                        Expanded(
-                          flex: 5,
-                          child: Column(
-                            children: [
-                              status,
-                              const SizedBox(height: 14),
-                              routes,
-                              const SizedBox(height: 14),
-                              _TopologyPanel(
-                                topology: widget.controller.topology,
-                              ),
-                              const SizedBox(height: 12),
-                              const _AgentAccessAbout(),
-                            ],
+              AnimatedBuilder(
+                animation: widget.controller,
+                builder: (context, _) => AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 180),
+                  child: widget.controller.isLive
+                      ? ShadButton.outline(
+                          key: const Key('disconnect-local-host'),
+                          onPressed: _disconnect,
+                          leading: const Icon(LucideIcons.unlink),
+                          child: const Text('断开连接'),
+                        )
+                      : ShadButton(
+                          key: const Key('connect-local-host'),
+                          onPressed:
+                              widget.controller.connectionStatus ==
+                                  HostConnectionStatus.connecting
+                              ? null
+                              : _connect,
+                          leading:
+                              widget.controller.connectionStatus ==
+                                  HostConnectionStatus.connecting
+                              ? const SizedBox(
+                                  width: 18,
+                                  child: ShadProgress(minHeight: 2),
+                                )
+                              : const Icon(LucideIcons.link),
+                          child: Text(
+                            widget.controller.connectionStatus ==
+                                    HostConnectionStatus.connecting
+                                ? '正在连接'
+                                : '连接本机主机',
                           ),
+                        ),
+                ),
+              ),
+              if (compact)
+                Tooltip(
+                  message: '扫描主机配对二维码',
+                  child: SizedBox(
+                    width: 44,
+                    height: 44,
+                    child: ShadIconButton.outline(
+                      key: const Key('scan-pairing-qr'),
+                      onPressed: _scanPairingCode,
+                      icon: const Icon(LucideIcons.scanLine),
+                    ),
+                  ),
+                ),
+              if (!compact)
+                ShadButton.outline(
+                  key: const Key('scan-pairing-qr'),
+                  onPressed: _scanPairingCode,
+                  leading: const Icon(LucideIcons.scanLine),
+                  child: const Text('扫描主机配对二维码'),
+                ),
+            ],
+          ),
+          if (_validationMessage != null) ...[
+            const SizedBox(height: 12),
+            _ValidationResult(message: _validationMessage!),
+          ],
+        ],
+      ),
+    );
+    final routes = AnimatedBuilder(
+      animation: widget.controller,
+      builder: (context, _) => GlassSurface(
+        padding: EdgeInsets.all(compact ? 14 : 18),
+        radius: 20,
+        blur: 8,
+        shadow: false,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('连接路径', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 8),
+            _RouteRow(
+              icon: LucideIcons.wifi,
+              title: '局域网 / 本机直连',
+              status: widget.controller.connectionRoute == '局域网直连'
+                  ? '当前路线'
+                  : '优先尝试',
+              color: widget.controller.connectionRoute == '局域网直连'
+                  ? shadSuccess
+                  : shadMuted,
+            ),
+            _RouteRow(
+              icon: LucideIcons.globe,
+              title: 'IPv6 / 点对点直连',
+              status: '暂不可用',
+              color: shadMuted,
+            ),
+            _RouteRow(
+              icon: LucideIcons.network,
+              title: '自托管 WebSocket 中继',
+              status: widget.controller.connectionRoute == '中继'
+                  ? '当前路线'
+                  : _relayMode
+                  ? '手动优先'
+                  : '自动兜底',
+              color: widget.controller.connectionRoute == '中继'
+                  ? shadSuccess
+                  : shadMuted,
+            ),
+            const SizedBox(height: 14),
+            const _SecurityNote(),
+          ],
+        ),
+      ),
+    );
+
+    return ListView(
+      key: const PageStorageKey<String>('connection-page-scroll'),
+      controller: _scrollController,
+      padding: EdgeInsets.fromLTRB(
+        compact ? 14 : 18,
+        compact ? 12 : 20,
+        compact ? 14 : 18,
+        compact ? 16 : 24,
+      ),
+      children: [
+        if (wide)
+          Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1120),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(flex: 6, child: form),
+                  const SizedBox(width: 18),
+                  Expanded(
+                    flex: 5,
+                    child: Column(
+                      children: [
+                        status,
+                        const SizedBox(height: 14),
+                        routes,
+                        const SizedBox(height: 14),
+                        AnimatedBuilder(
+                          animation: widget.controller,
+                          builder: (context, _) => _TopologyPanel(
+                            topology: widget.controller.topology,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        const _AgentAccessAbout(),
+                        const SizedBox(height: 12),
+                        UpdateCheckCard(
+                          product: 'client',
+                          target: kIsWeb ? 'web' : 'android',
+                          currentVersion: '1.0.0',
                         ),
                       ],
                     ),
                   ),
-                )
-              else ...[
-                Text(
-                  '连接设备',
-                  style: compact
-                      ? Theme.of(context).textTheme.titleLarge
-                      : Theme.of(context).textTheme.headlineSmall,
-                ),
-                SizedBox(height: compact ? 8 : 12),
-                status,
-                SizedBox(height: compact ? 10 : 14),
-                form,
-                SizedBox(height: compact ? 10 : 14),
-                routes,
-                SizedBox(height: compact ? 10 : 14),
+                ],
+              ),
+            ),
+          )
+        else ...[
+          Text(
+            '连接设备',
+            style: compact
+                ? Theme.of(context).textTheme.titleLarge
+                : Theme.of(context).textTheme.headlineSmall,
+          ),
+          SizedBox(height: compact ? 8 : 12),
+          status,
+          SizedBox(height: compact ? 10 : 14),
+          form,
+          SizedBox(height: compact ? 10 : 14),
+          routes,
+          SizedBox(height: compact ? 10 : 14),
+          AnimatedBuilder(
+            animation: widget.controller,
+            builder: (context, _) =>
                 _TopologyPanel(topology: widget.controller.topology),
-                SizedBox(height: compact ? 10 : 14),
-                const _AgentAccessAbout(),
-              ],
-            ],
-          );
-        },
-      ),
+          ),
+          SizedBox(height: compact ? 10 : 14),
+          const _AgentAccessAbout(),
+          SizedBox(height: compact ? 10 : 12),
+          UpdateCheckCard(
+            product: 'client',
+            target: kIsWeb ? 'web' : 'android',
+            currentVersion: '1.0.0',
+          ),
+        ],
+      ],
     );
   }
 
@@ -658,6 +687,9 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
           ? '已连接电脑主机。可选择 OpenCode、Codex 或 Claude Code 会话。'
           : widget.controller.connectionError ?? '连接未建立。';
     });
+    if (widget.controller.host.errorCode == 'pairing_required') {
+      await widget.controller.host.clearSavedPairing();
+    }
   }
 
   Widget _pairingInviteVisibilityButton() => Tooltip(

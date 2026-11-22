@@ -26,7 +26,8 @@ class SessionScreen extends StatefulWidget {
   State<SessionScreen> createState() => _SessionScreenState();
 }
 
-class _SessionScreenState extends State<SessionScreen> {
+class _SessionScreenState extends State<SessionScreen>
+    with AutomaticKeepAliveClientMixin<SessionScreen>, WidgetsBindingObserver {
   final Map<String, XFile> _localFiles = {};
   final Set<String> _sendingSessionIds = <String>{};
   String? _activeAgentId;
@@ -50,10 +51,20 @@ class _SessionScreenState extends State<SessionScreen> {
   Timer? _runningPoll;
   DateTime? _lastControlsRefresh;
   String? _observedFormId;
+  double _viewportWidth = 0;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    final views = WidgetsBinding.instance.platformDispatcher.views;
+    if (views.isNotEmpty) {
+      final view = views.first;
+      _viewportWidth = view.physicalSize.width / view.devicePixelRatio;
+    }
     widget.controller.addListener(_watchTextQuestion);
     _runningPoll = Timer.periodic(const Duration(seconds: 5), (_) {
       final sessionId = widget.controller.selectedSessionId;
@@ -75,6 +86,16 @@ class _SessionScreenState extends State<SessionScreen> {
   }
 
   @override
+  void didChangeMetrics() {
+    final views = WidgetsBinding.instance.platformDispatcher.views;
+    if (views.isEmpty) return;
+    final view = views.first;
+    final width = view.physicalSize.width / view.devicePixelRatio;
+    if (!mounted || width == _viewportWidth) return;
+    setState(() => _viewportWidth = width);
+  }
+
+  @override
   void didUpdateWidget(covariant SessionScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller == widget.controller) return;
@@ -91,6 +112,7 @@ class _SessionScreenState extends State<SessionScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     widget.controller.removeListener(_watchTextQuestion);
     _runningPoll?.cancel();
     _controlsRefreshDebounce?.cancel();
@@ -485,19 +507,29 @@ class _SessionScreenState extends State<SessionScreen> {
   }
 
   Future<void> _interruptSelectedSession() async {
+    await _requestStopSelectedSession(showToast: true);
+  }
+
+  Future<bool> _requestStopSelectedSession({required bool showToast}) async {
     try {
       await widget.controller.interruptSelectedSession();
       if (mounted) {
-        ShadToaster.of(context).show(const ShadToast(title: Text('已请求停止当前生成')));
+        if (showToast) {
+          ShadToaster.of(
+            context,
+          ).show(const ShadToast(title: Text('已请求停止当前生成')));
+        }
       }
       final sessionId = widget.controller.selectedSessionId;
       if (sessionId != null && sessionId.startsWith('codex:')) {
         _loadControls(sessionId, forceRefresh: true);
       }
+      return true;
     } catch (error) {
-      if (mounted) {
+      if (mounted && showToast) {
         ShadToaster.of(context).show(ShadToast(title: Text('$error')));
       }
+      return false;
     }
   }
 
@@ -828,6 +860,7 @@ class _SessionScreenState extends State<SessionScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return AnimatedBuilder(
       animation: widget.controller,
       builder: (context, _) {
@@ -927,7 +960,7 @@ class _SessionScreenState extends State<SessionScreen> {
                   ],
                   if (isLive &&
                       activeSession != null &&
-                      MediaQuery.sizeOf(context).width >= 600) ...[
+                      _viewportWidth >= 600) ...[
                     _SessionSummary(
                       title: activeSession.title,
                       subtitle:
@@ -1108,11 +1141,14 @@ class _SessionScreenState extends State<SessionScreen> {
               onSend: _sendMessage,
               onModelCommand: _showModelDialog,
               onStopCommand: _interruptSelectedSession,
+              onStopAndSend: () =>
+                  _requestStopSelectedSession(showToast: false),
               onActionCommand: (action) => unawaited(_runCodexAction(action)),
               skills: _controls?.skills ?? const [],
               codexControlsEnabled: isManagedCodex,
               modelControlsEnabled: canChangeModel,
               canInterrupt: canInterrupt,
+              canStopAndSend: isDesktopCodex || canInterrupt,
               thinking: isThinking,
               modelLabel: _controls?.model == null
                   ? '模型 / 思考'
@@ -2020,11 +2056,13 @@ class _MessageComposer extends StatefulWidget {
     required this.placeholder,
     required this.onModelCommand,
     required this.onStopCommand,
+    required this.onStopAndSend,
     required this.onActionCommand,
     required this.skills,
     required this.codexControlsEnabled,
     required this.modelControlsEnabled,
     required this.canInterrupt,
+    required this.canStopAndSend,
     required this.thinking,
     required this.modelLabel,
     this.queueMode = false,
@@ -2040,11 +2078,13 @@ class _MessageComposer extends StatefulWidget {
   final bool queueMode;
   final VoidCallback onModelCommand;
   final VoidCallback onStopCommand;
+  final Future<bool> Function() onStopAndSend;
   final void Function(String action) onActionCommand;
   final List<String> skills;
   final bool codexControlsEnabled;
   final bool modelControlsEnabled;
   final bool canInterrupt;
+  final bool canStopAndSend;
   final bool thinking;
   final String modelLabel;
 
@@ -2136,7 +2176,13 @@ class _MessageComposerState extends State<_MessageComposer> {
   Future<void> _send() async {
     if (!widget.enabled || _isSending) return;
     final value = _textController.text;
-    if (value.trim().isEmpty && _attachments.isEmpty) return;
+    final hasDraft = value.trim().isNotEmpty || _attachments.isNotEmpty;
+    if (!hasDraft) {
+      if (widget.thinking && widget.canInterrupt) {
+        widget.onStopCommand();
+      }
+      return;
+    }
     if (value.trimLeft().startsWith('/')) {
       final parts = value.trim().split(RegExp(r'\s+'));
       if (_attachments.isNotEmpty || parts.length > 1) {
@@ -2189,6 +2235,17 @@ class _MessageComposerState extends State<_MessageComposer> {
       }
       _textController.clear();
       return;
+    }
+
+    if (widget.thinking) {
+      if (!widget.canStopAndSend) return;
+      setState(() => _isSending = true);
+      final stopped = await widget.onStopAndSend();
+      if (!mounted) return;
+      if (!stopped) {
+        setState(() => _isSending = false);
+        return;
+      }
     }
     setState(() => _isSending = true);
     final error = await widget.onSend(value, List.of(_attachments));
@@ -2397,50 +2454,67 @@ class _MessageComposerState extends State<_MessageComposer> {
                 ),
               ),
               const SizedBox(width: 8),
-              Tooltip(
-                message: widget.thinking
-                    ? '停止当前生成'
-                    : _isSending
-                    ? '正在发送'
-                    : widget.queueMode
-                    ? '发送到桌面会话'
-                    : '发送消息',
-                child: SizedBox(
-                  width: 44,
-                  height: 44,
-                  child: ShadIconButton(
-                    key: const Key('send-reply'),
-                    onPressed: widget.thinking
-                        ? widget.canInterrupt && widget.enabled
-                              ? widget.onStopCommand
-                              : null
-                        : widget.enabled && !_isSending
-                        ? _send
-                        : null,
-                    icon: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 170),
-                      transitionBuilder: (child, animation) => ScaleTransition(
-                        scale: animation,
-                        child: FadeTransition(opacity: animation, child: child),
+              ValueListenableBuilder<TextEditingValue>(
+                valueListenable: _textController,
+                builder: (context, value, _) {
+                  final hasDraft =
+                      value.text.trim().isNotEmpty || _attachments.isNotEmpty;
+                  final stoppingBeforeSend =
+                      widget.thinking && hasDraft && widget.canStopAndSend;
+                  return Tooltip(
+                    message: widget.thinking
+                        ? stoppingBeforeSend
+                              ? '停止当前思考并发送'
+                              : '停止当前生成'
+                        : _isSending
+                        ? '正在发送'
+                        : widget.queueMode
+                        ? '发送到桌面会话'
+                        : '发送消息',
+                    child: SizedBox(
+                      width: 44,
+                      height: 44,
+                      child: ShadIconButton(
+                        key: const Key('send-reply'),
+                        onPressed: widget.thinking
+                            ? stoppingBeforeSend
+                                  ? _send
+                                  : widget.canInterrupt && widget.enabled
+                                  ? widget.onStopCommand
+                                  : null
+                            : widget.enabled && !_isSending
+                            ? _send
+                            : null,
+                        icon: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 170),
+                          transitionBuilder: (child, animation) =>
+                              ScaleTransition(
+                                scale: animation,
+                                child: FadeTransition(
+                                  opacity: animation,
+                                  child: child,
+                                ),
+                              ),
+                          child: widget.thinking && !stoppingBeforeSend
+                              ? const Icon(
+                                  LucideIcons.square,
+                                  key: ValueKey('stop'),
+                                )
+                              : _isSending
+                              ? const SizedBox(
+                                  key: ValueKey('sending'),
+                                  width: 18,
+                                  child: ShadProgress(minHeight: 2),
+                                )
+                              : const Icon(
+                                  LucideIcons.arrowUp,
+                                  key: ValueKey('send'),
+                                ),
+                        ),
                       ),
-                      child: widget.thinking
-                          ? const Icon(
-                              LucideIcons.square,
-                              key: ValueKey('stop'),
-                            )
-                          : _isSending
-                          ? const SizedBox(
-                              key: ValueKey('sending'),
-                              width: 18,
-                              child: ShadProgress(minHeight: 2),
-                            )
-                          : const Icon(
-                              LucideIcons.arrowUp,
-                              key: ValueKey('send'),
-                            ),
                     ),
-                  ),
-                ),
+                  );
+                },
               ),
             ],
           ),

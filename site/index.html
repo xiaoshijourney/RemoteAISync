@@ -1,28 +1,30 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-type="software">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f7f8fa">
   <meta name="description" content="RemoteAISync brings the AI coding agents on your own computer or server to your phone and browser.">
+  <meta name="site-kind" content="software">
   <title>RemoteAISync — Agent stays on your machine</title>
+  <script>document.documentElement.classList.add('m-enter');</script>
   <link rel="icon" href="assets/remoteaisync_icon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400..700&display=swap" rel="stylesheet">
   <style>
     :root {
       color-scheme: light;
       --ink: #17181d;
       --paper: #f7f8fa;
       --white: #fff;
-      --muted: #737780;
+      --muted: #70747c;
       --line: #e3e5e9;
       --soft: #eef0f2;
-      --sage: #718b79;
-      --sage-wash: #eaf0ec;
-      --font: "Noto Sans SC", "Microsoft YaHei", sans-serif;
-      --latin: "Manrope", "Noto Sans SC", sans-serif;
+      --sage: #5c6068;
+      --sage-wash: #e9ebef;
+      --font: "Manrope", "Microsoft YaHei", "PingFang SC", sans-serif;
+      --latin: "Manrope", "Segoe UI", sans-serif;
       --mono: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
       --ease: cubic-bezier(.2,.72,.22,1);
     }
@@ -47,7 +49,6 @@
     .nav-cta:hover { background: #303137; color: white; }
     .hero { padding: 78px 0 80px; overflow: hidden; }
     .hero { position: relative; isolation: isolate; }
-    .wavefield { position: absolute; z-index: -1; inset: 0 -18vw 0 -18vw; width: 136%; height: 100%; pointer-events: none; opacity: .42; mix-blend-mode: multiply; }
     .hero-copy { max-width: 890px; margin: 0 auto 48px; text-align: center; }
     .eyebrow { display: inline-flex; align-items: center; gap: 9px; margin-bottom: 22px; color: #555962; font: 600 11px var(--latin); letter-spacing: .03em; text-transform: uppercase; }
     .eyebrow::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--sage); box-shadow: 0 0 0 4px var(--sage-wash); }
@@ -113,33 +114,67 @@
     .capability { min-height: 220px; padding: 28px 26px 24px; border: 1px solid #dfe1e5; border-radius: 18px; background: rgba(255,255,255,.68); transition: transform .35s var(--ease), background .25s, box-shadow .3s; }
     .capability:hover { transform: translateY(-4px); background: white; box-shadow: 0 14px 35px rgba(23,24,29,.08); }
     .capability-index { display: block; margin-bottom: 46px; color: var(--sage); font: 700 11px var(--mono); }
+    .capability-visual { display: flex; align-items: center; gap: 6px; height: 26px; margin-bottom: 20px; }
+    .capability-visual span { display: block; height: 8px; border-radius: 999px; background: #dfe1e5; }
+    .capability-visual span:first-child { width: 34px; background: var(--ink); }
+    .capability-visual span:nth-child(2) { width: 58px; }
+    .capability-visual span:nth-child(3) { width: 24px; background: #aeb2ba; }
+    .capability:hover .capability-visual span:first-child { animation: status-sweep 1s var(--ease) both; }
     .capability h3, .deploy-item h3 { margin: 0; font-size: 18px; font-weight: 600; }
     .capability p, .deploy-item p { margin: 12px 0 0; color: var(--muted); font-size: 12px; line-height: 1.8; }
-    .agent-list { margin-top: 34px; border-top: 1px solid #d7d9dd; }
-    .agent-row { display: grid; grid-template-columns: 190px 1fr auto; align-items: center; gap: 22px; min-height: 70px; border-bottom: 1px solid #d7d9dd; }
-    .agent-brand { display: inline-flex; align-items: center; gap: 10px; }
-    .agent-brand img { width: 26px; height: 26px; border-radius: 8px; }
-    .agent-brand strong { font: 600 13px var(--latin); }
-    .agent-row > span { color: var(--muted); font-size: 12px; }
-    .agent-row b { padding: 6px 10px; border-radius: 999px; background: var(--sage-wash); color: #58715f; font: 700 10px var(--latin); }
+    .agent-list { margin-top: 34px; }
+    .agent-list-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin: 42px 0 14px; }
+    .agent-list-head strong { font-size: 13px; font-weight: 700; }
+    .agent-list-head span { color: #626670; font: 600 10px var(--latin); letter-spacing: .08em; text-transform: uppercase; }
+    .agent-row { display: grid; grid-template-columns: 56px minmax(0, 1fr); grid-template-rows: auto auto; align-items: center; gap: 5px 16px; min-height: 178px; padding: 24px 22px; border: 1px solid #d7d9dd; border-radius: 8px; background: #fff; transition: transform .3s var(--ease), border-color .25s, box-shadow .3s; }
+    .agent-row:hover { transform: translateY(-4px); border-color: #b8bbc2; box-shadow: 0 14px 34px #17181d12; }
+    .agent-brand { display: contents; }
+    .agent-brand img { grid-row: 1 / span 2; width: 48px; height: 48px; padding: 10px; border: 1px solid #e0e2e6; border-radius: 12px; background: #f4f5f7; object-fit: contain; }
+    .agent-brand strong { align-self: end; font: 700 18px var(--latin); }
+    .agent-row > span { align-self: start; color: var(--muted); font-size: 11px; line-height: 1.6; }
+    .agent-row b { position: absolute; top: 18px; right: 18px; padding: 6px 9px; border-radius: 4px; background: var(--ink); color: #fff; font: 700 9px var(--latin); letter-spacing: .04em; }
+    .agent-row { position: relative; }
+    .agent-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
     .deploy-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
     .deploy-item { display: grid; grid-template-columns: 42px 1fr; gap: 16px; min-height: 205px; padding: 25px 24px 22px; border: 1px solid var(--line); border-radius: 18px; background: var(--white); }
     .deploy-icon { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 12px; background: var(--ink); color: white; font: 700 14px var(--latin); }
     .deploy-item code { grid-column: 2; align-self: end; justify-self: start; color: #777b83; font: 11px var(--mono); }
+    .deploy-visual { grid-column: 1 / -1; display: grid; gap: 8px; min-height: 76px; margin-top: 4px; padding: 12px; border: 1px solid #e2e4e8; border-radius: 7px; background: #f6f7f8; font: 10px var(--mono); color: #626670; }
+    .deploy-visual-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .deploy-visual-title { color: var(--ink); font: 700 9px var(--latin); letter-spacing: .08em; text-transform: uppercase; }
+    .deploy-visual-status { display: inline-flex; align-items: center; gap: 5px; color: #565b65; font: 700 9px var(--latin); }
+    .deploy-visual-status::before { width: 6px; height: 6px; border-radius: 50%; background: #7b818a; content: ""; box-shadow: 0 0 0 3px #17181d0e; }
+    .deploy-visual-line { height: 7px; border-radius: 999px; background: linear-gradient(90deg, #17181d 0 28%, #d5d7dc 28% 34%, #8e939c 34% 72%, #d5d7dc 72%); transform-origin: left; }
+    .deploy-visual-line.short { width: 68%; }
+    .deploy-visual-line.medium { width: 82%; }
+    .deploy-visual-line.long { width: 94%; }
+    .deploy-item:hover .deploy-visual-line { animation: status-sweep 1.2s var(--ease) both; }
+    @keyframes status-sweep { from { transform: scaleX(.35); opacity: .45; } to { transform: scaleX(1); opacity: 1; } }
     .security-panel { display: grid; grid-template-columns: minmax(260px,.7fr) minmax(0,1fr); gap: 48px; align-items: center; margin-top: 12px; padding: 30px 32px; border-radius: 18px; background: var(--ink); color: white; }
     .security-panel h3 { margin: 11px 0 0; font-size: 21px; font-weight: 600; line-height: 1.45; }
     .security-panel p { margin: 0; color: #c1c3c9; font-size: 12px; line-height: 1.9; }
-    .closing { padding: 70px 0 84px; background: var(--ink); color: white; }
+    .closing { min-height: 100svh; display: flex; align-items: center; padding: 92px 0; background: var(--ink); color: white; }
     .closing-inner { display: flex; justify-content: space-between; align-items: center; gap: 35px; }
     .closing h2 { margin: 0; font-size: clamp(28px, 4vw, 44px); }
     .closing p { max-width: 540px; margin: 13px 0 0; color: #b9bbc1; font-size: 13px; line-height: 1.8; }
     .closing .button { flex: 0 0 auto; border-color: white; background: white; color: var(--ink); }
+    .closing-status { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: center; min-width: min(390px, 100%); padding: 18px 20px; border: 1px solid #ffffff24; border-radius: 8px; background: #ffffff0d; }
+    .closing-status-mark { display: grid; place-items: center; width: 42px; height: 42px; border: 1px solid #ffffff30; border-radius: 10px; color: #fff; font: 700 14px var(--mono); }
+    .closing-status small { display: block; color: #9da1a9; font: 700 9px var(--latin); letter-spacing: .12em; }
+    .closing-status strong { display: block; margin-top: 5px; color: #fff; font: 600 15px var(--latin); }
+    .closing-status b { display: inline-flex; align-items: center; gap: 6px; margin-top: 7px; color: #d9dde2; font: 600 10px var(--latin); }
+    .closing-status b::before { width: 6px; height: 6px; border-radius: 50%; background: #d9dde2; content: ""; box-shadow: 0 0 0 4px #ffffff14; }
     .footer { padding: 24px 0; background: var(--ink); color: #a6a8af; border-top: 1px solid #ffffff20; font: 11px var(--latin); }
     .footer-inner { display: flex; justify-content: space-between; gap: 20px; }
     .footer a { transition: color .2s; }
     .footer a:hover { color: white; }
     .reveal { opacity: 0; transform: translateY(18px); transition: opacity .7s var(--ease), transform .7s var(--ease); }
     .reveal.is-visible { opacity: 1; transform: none; }
+    #about, #routes, #agents, #deploy { min-height: 100svh; scroll-margin-top: 76px; }
+    #agents { background: #f0f1f3; }
+    #deploy { background: #fff; }
+    #agents .wrap, #deploy .wrap { display: flex; flex-direction: column; justify-content: center; min-height: calc(100svh - 76px); }
+    #agents .capability-grid, #agents .agent-list-head, #agents .agent-list, #deploy .deploy-grid, #deploy .security-panel { flex: 0 0 auto; }
     @keyframes arrive { from { opacity: 0; transform: translateY(20px) scale(.992); } to { opacity: 1; transform: none; } }
     @keyframes phone-arrive { from { opacity: 0; transform: translate(16px, 18px) rotate(1.2deg); } to { opacity: 1; transform: translate(0,0) rotate(0); } }
     @keyframes travel { to { left: 100%; } }
@@ -152,7 +187,6 @@
       .brand img { width: 30px; height: 30px; }
       .language, .nav-cta { min-height: 36px; padding-inline: 12px; font-size: 11px; }
       .hero { padding: 58px 0 62px; }
-      .wavefield { inset: 0 -48vw 0 -48vw; width: 196%; opacity: .28; }
       .hero-copy { margin-bottom: 38px; text-align: left; }
       .eyebrow { margin-bottom: 17px; }
       h1 { font-size: clamp(38px, 11vw, 58px); }
@@ -176,6 +210,7 @@
       .agent-row > span { grid-column: 1/-1; grid-row: 2; font-size: 11px; }
       .agent-row b { grid-column: 2; grid-row: 1; }
       .deploy-item { min-height: 0; padding: 22px 20px 19px; }
+      .deploy-visual { min-height: 68px; }
       .security-panel { display: block; padding: 24px 21px; }
       .security-panel p { margin-top: 20px; }
       .route-demo { display: flex; flex-direction: column; min-height: 0; border-radius: 16px; }
@@ -195,22 +230,295 @@
       .topology-foot { align-items: flex-start; }
       .route-explainer { font-size: 10px; }
       .route-badge { font-size: 8px; }
-      .closing { padding: 52px 0; }
+      .closing { min-height: 0; padding: 72px 0; }
       .closing-inner { align-items: flex-start; flex-direction: column; }
+      .closing-status { min-width: 100%; }
       .closing p { font-size: 12px; }
       .footer-inner { flex-direction: column; }
     }
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
       .reveal { opacity: 1; transform: none; }
-      .wavefield { display: none; }
+    }
+  </style>
+  <style id="motion-led-redesign">
+    :root {
+      color-scheme: light;
+      --ink: #17181d;
+      --paper: #f7f8fa;
+      --white: #fff;
+      --muted: #70747c;
+      --line: #e3e5e9;
+      --soft: #eef0f2;
+      --sage: #5c6068;
+      --sage-wash: #e9ebef;
+      --night: #17181d;
+      --lime: #f3f4f6;
+      --signal: #777b83;
+    }
+    html { scroll-behavior: auto; }
+    body { background: var(--paper); color: var(--ink); }
+    .wrap { width: min(1296px, calc(100% - 80px)); }
+    .site-header { position: relative; z-index: 5; height: 76px; border-bottom: 1px solid var(--line); background: #fff; color: var(--ink); }
+    .nav { gap: 34px; }
+    .brand { font-size: 15px; }
+    .brand img { width: 32px; height: 32px; border-radius: 8px; }
+    .nav-links { color: #545760; font-size: 12px; }
+    .nav-links a:hover { color: var(--ink); }
+    .language, .nav-cta { min-height: 40px; border-color: var(--line); border-radius: 999px; color: var(--ink); }
+    .language:hover { background: var(--soft); border-color: #c8cbd1; }
+    .nav-cta { display: inline-flex; align-items: center; justify-content: center; min-width: 96px; padding-inline: 16px; background: transparent; border-color: #cdd0d5; color: var(--ink); line-height: 1; text-align: center; }
+    .nav-cta:hover { background: #fff; border-color: #aeb2ba; color: var(--ink); }
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(420px, .9fr) minmax(0, 1.1fr);
+      grid-template-areas: "copy show" "trust show";
+      align-content: center;
+      align-items: center;
+      gap: 22px clamp(34px, 5vw, 82px);
+      width: 100%;
+      max-width: none;
+      min-height: calc(100svh - 76px);
+      padding: 64px max(40px, calc((100% - 1296px) / 2)) 120px;
+      overflow: hidden;
+      background: #fff;
+      color: var(--ink);
+      isolation: isolate;
+    }
+    .hero::before {
+      position: absolute;
+      z-index: -1;
+      inset: 0;
+      background-image: linear-gradient(#17181d08 1px, transparent 1px), linear-gradient(90deg, #17181d08 1px, transparent 1px);
+      background-size: 72px 72px;
+      content: "";
+      opacity: .42;
+      mask-image: linear-gradient(90deg, transparent 4%, #000 46%, #000 100%);
+      pointer-events: none;
+    }
+    .hero::after { position: absolute; z-index: -1; top: 0; right: 12%; width: 1px; height: 100%; background: #17181d0c; content: ""; }
+    .hero-copy { grid-area: copy; max-width: 540px; margin: 0; text-align: left; }
+    .eyebrow { margin-bottom: 27px; color: #555962; font-size: 10px; letter-spacing: 0; text-transform: none; }
+    .eyebrow::before { width: 8px; height: 8px; background: var(--ink); box-shadow: 0 0 0 5px #17181d0d; }
+    h1 { max-width: 600px; font-size: 54px; font-weight: 600; line-height: 1.16; letter-spacing: 0; }
+    h1 .accent { color: #777b83; }
+    .hero-copy p { max-width: 460px; margin: 22px 0 0; color: #626670; font-size: 14px; line-height: 1.9; }
+    .hero-actions { justify-content: flex-start; gap: 10px; margin-top: 30px; }
+    .button { min-height: 46px; border-radius: 999px; padding: 0 18px; background: var(--ink); border-color: var(--ink); color: #fff; font-size: 12px; }
+    .button:hover { transform: translateY(-2px); background: #303137; border-color: #303137; }
+    .button.secondary { border-color: var(--ink); background: var(--ink); color: #fff; }
+    .button.secondary:hover { background: #303137; border-color: #303137; }
+    .showcase { --preview-inset: 7%; grid-area: show; align-self: center; width: 100%; min-height: 0; padding: 0 var(--preview-inset) 0 0; perspective: none; }
+    .preview-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px; }
+    .preview-label { display: inline-flex; align-items: center; gap: 9px; color: #545760; font: 600 10px var(--latin); }
+    .preview-label::before { width: 7px; height: 7px; border-radius: 50%; background: var(--ink); content: ""; box-shadow: 0 0 0 4px #17181d12; }
+    .preview-switch { display: inline-flex; gap: 3px; padding: 3px; border: 1px solid var(--line); border-radius: 7px; background: #f0f1f3; }
+    .preview-switch button { min-height: 32px; border: 0; border-radius: 5px; padding: 0 10px; background: transparent; color: #626670; font-size: 10px; cursor: pointer; transition: color .2s, background .2s; }
+    .preview-switch button:hover { color: var(--ink); }
+    .preview-switch button:focus-visible,
+    .site-header a:focus-visible,
+    .site-header button:focus-visible,
+    .hero-actions a:focus-visible,
+    .closing a:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+    .preview-switch button[aria-pressed="true"] { background: var(--ink); color: #fff; }
+    .desktop-shot { display: block; width: 100%; height: auto; aspect-ratio: 1902 / 1071; object-fit: cover; object-position: center top; border: 1px solid #dfe1e5; border-radius: 8px; background: #f3f3f4; box-shadow: 0 30px 80px #17181d20; animation: none; transform-origin: 50% 50%; }
+    .phone-shot { position: absolute; right: var(--preview-inset); bottom: 0; width: clamp(78px, 6.2vw, 90px); height: auto; aspect-ratio: 1080 / 2400; overflow: hidden; border: 4px solid #17181d; border-radius: 20px; background: #f6f6f6; box-shadow: 0 18px 48px #17181d30; animation: none; }
+    .phone-shot img { width: 100%; height: 100%; object-fit: cover; border-radius: 17px; }
+    .showcase-caption { display: none; }
+    .showcase[data-preview="host"] .phone-shot { opacity: .22; transform: translateX(18px) scale(.92); }
+    .showcase[data-preview="host"] .desktop-shot { transform: scale(1.015); }
+    .showcase[data-preview="client"] { min-height: calc(clamp(170px, 18vw, 245px) * 2.223 + 78px); }
+    .showcase[data-preview="client"] .phone-shot { top: 78px; bottom: auto; width: clamp(170px, 18vw, 245px); transform: translateY(-3px) scale(1.02); box-shadow: 0 28px 72px #17181d38; }
+    .showcase[data-preview="client"] .desktop-shot { opacity: .35; transform: scale(.975); }
+    .desktop-shot, .phone-shot { transition: opacity .4s ease, width .55s var(--ease), box-shadow .4s ease; }
+    .trust-line { grid-area: trust; justify-content: flex-start; gap: 9px 19px; padding: 0; color: #626670; font: 500 10px var(--font); }
+    .trust-line span { gap: 7px; }
+    .trust-line span::before { background: #8a8e96; }
+    .section { position: relative; padding: 110px 0; border: 0; }
+    .section-head { grid-template-columns: minmax(0, .95fr) minmax(300px, .65fr); align-items: start; gap: 60px; margin-bottom: 52px; }
+    .kicker { color: #555962; font-size: 10px; letter-spacing: .08em; }
+    h2 { font-size: 42px; font-weight: 600; line-height: 1.25; }
+    .section-head p { color: #555962; font-size: 14px; line-height: 1.9; }
+    #routes { min-height: 100svh; overflow: hidden; background: #eef0f3; }
+    #routes .wrap { position: relative; z-index: 1; }
+    #routes::before { position: absolute; top: 0; right: 8%; width: 1px; height: 100%; background: #17181d12; content: ""; }
+    .route-demo { min-height: 390px; border: 1px solid #dfe1e5; border-radius: 8px; background: #fff; color: var(--ink); box-shadow: 0 14px 40px #17181d08; }
+    .route-controls { background: #f4f5f7; border-color: var(--line); }
+    .control-label { color: #626670; }
+    .route-option { border-radius: 6px; color: var(--ink); }
+    .route-option[aria-pressed="true"] { background: #fff; border-color: #d9dbe0; box-shadow: 0 3px 10px #17181d08; }
+    .route-option small { color: #626670; }
+    .route-option .radio { border-color: #aeb2ba; }
+    .route-option[aria-pressed="true"] .radio { border-color: var(--ink); }
+    .topology-top { color: #626670; }
+    .scenario-switch { background: #f0f1f3; border-radius: 6px; }
+    .scenario-switch button { border-radius: 4px; color: #626670; }
+    .scenario-switch button[aria-pressed="true"] { background: var(--ink); color: #fff; box-shadow: none; }
+    .topology-canvas { overflow: hidden; }
+    .node { border-color: #dfe1e5; border-radius: 8px; background: #fff; color: var(--ink); }
+    .node .node-mark { border-radius: 6px; background: #f0f1f3; }
+    .route-demo .node strong { color: var(--ink); }
+    .route-demo .node small { color: #626670; }
+    .route-demo .node.relay-node .node-mark { color: var(--ink); }
+    .node.relay-node .node-mark { background: #f0f1f3; color: var(--ink); }
+    .route-demo[data-route="lan"] .relay-node { opacity: 1; transform: none; border-style: dashed; }
+    .connection { background: #d4d6db; }
+    .connection::after { background: #747881; }
+    .connection .packet { background: var(--ink); box-shadow: 0 0 0 4px #17181d12; }
+    .route-demo[data-route="relay"] .connection { background: #d4d6db; }
+    .route-demo[data-route="relay"] .relay-node { border-color: #92959d; box-shadow: 0 0 0 1px #17181d0d; }
+    .topology-foot { border-color: var(--line); }
+    .route-explainer { color: #555962; font-size: 12px; }
+    .route-badge { border-radius: 5px; background: var(--ink); color: #fff; }
+    .route-badge::before { background: #fff; }
+    .muted-section { background: #fff; }
+    .capability-grid { gap: 0 18px; }
+    .capability { min-height: 215px; padding: 23px 22px; border: 1px solid #dfe1e5; border-radius: 8px; background: transparent; }
+    .capability:hover { background: white; box-shadow: 0 14px 35px #17181d10; }
+    .capability-index { margin-bottom: 36px; color: #626670; }
+    .capability h3, .deploy-item h3 { font-size: 17px; }
+    .capability p, .deploy-item p { color: #4f535b; font-size: 12px; }
+    .deploy-item { min-height: 0; align-content: start; }
+    .deploy-item code { align-self: start; margin-top: 8px; color: #626670; }
+    .agent-row { border-color: #d9dbe0; }
+    .agent-row b { background: var(--ink); color: #fff; }
+    .deploy-item { border: 1px solid var(--line); border-radius: 8px; background: transparent; }
+    .deploy-icon { border-radius: 6px; background: var(--ink); color: #fff; }
+    .deploy-icon img { display: block; width: 23px; height: 23px; object-fit: contain; filter: brightness(0) invert(1); }
+    .security-panel { border-radius: 8px; background: var(--night); }
+    .security-panel .kicker { color: #fff; }
+    .runtime-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; margin: 28px 0 12px; padding: 20px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+    .runtime-stat { display: grid; gap: 7px; }
+    .runtime-stat strong { color: var(--ink); font: 600 32px/1 var(--mono); letter-spacing: -.03em; }
+    .runtime-stat span { color: #626670; font: 600 10px/1.4 var(--latin); letter-spacing: .08em; text-transform: uppercase; }
+    .closing { padding: 92px 0; background: var(--ink); color: #fff; }
+    .closing h2 { max-width: 760px; font-size: 42px; }
+    .closing p { color: #b9bbc1; }
+    .closing .button { border-color: #fff; background: #fff; color: var(--ink); }
+    .closing .button:hover { background: #e8e9ec; color: var(--ink); }
+    .closing a.button:focus-visible { outline: 2px solid #fff; outline-offset: 4px; box-shadow: 0 0 0 4px #17181d; }
+    .footer { background: var(--night); color: #bdc1b6; }
+    .footer a:hover { color: #fff; }
+    .footer a:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+    .reveal { opacity: 1; transform: none; }
+    .route-demo[data-route="lan"] .connection .packet,
+    .route-demo[data-route="relay"] .connection .packet { animation: none; }
+      .route-demo[data-route="lan"] .relay-node { opacity: 1; border-style: dashed; }
+    .route-demo[data-route="relay"] .relay-node { opacity: 1; }
+    @media (max-width: 1100px) {
+      .wrap { width: min(100% - 56px, 820px); }
+      .nav { gap: 18px; }
+      .nav-links { gap: 17px; }
+      .hero { width: 100%; grid-template-columns: minmax(330px, .8fr) minmax(0, 1.2fr); gap: 20px 32px; padding-inline: 28px; }
+      .showcase { padding-bottom: 0; }
+      h1 { font-size: 42px; }
+      .showcase { --preview-inset: 6%; }
+      .phone-shot { width: clamp(72px, 8vw, 86px); }
+      .trust-line { gap: 8px 12px; }
+    }
+    @media (max-width: 700px) {
+      .hero { grid-template-columns: 1fr; grid-template-areas: "copy" "show" "trust"; align-content: start; min-height: calc(100svh - 76px); padding-block: 40px 28px; }
+      .hero-copy { max-width: 650px; }
+      .showcase { width: min(100%, 760px); }
+      .trust-line { max-width: 760px; }
+    }
+    @media (max-width: 780px) {
+      .wrap { width: min(100% - 36px, 620px); }
+      .site-header { height: 66px; }
+      .nav { gap: 12px; }
+      .nav-links { display: none; }
+      .brand { min-height: 44px; font-size: 13px; }
+      .brand img { width: 29px; height: 29px; }
+      .language, .nav-cta { min-height: 44px; padding-inline: 11px; font-size: 10px; }
+      .hero { width: 100%; grid-template-columns: 1fr; grid-template-areas: "copy" "show" "trust"; align-content: start; gap: 18px; min-height: calc(100svh - 66px); padding: 36px 18px 20px; }
+      .hero-copy { max-width: 610px; }
+      .eyebrow { margin-bottom: 14px; }
+      h1 { font-size: 43px; line-height: 1.22; }
+      .hero-copy p { margin-top: 12px; font-size: 13px; line-height: 1.65; }
+      .hero-actions { margin-top: 15px; }
+      .button { min-height: 42px; padding-inline: 15px; font-size: 11px; }
+      .showcase { --preview-inset: 42px; width: min(100%, 600px); margin-inline: auto; padding: 0 var(--preview-inset) 0 0; }
+      .preview-toolbar { margin-bottom: 10px; }
+      .preview-label { font-size: 9px; }
+      .preview-switch button { min-height: 44px; padding-inline: 9px; font-size: 10px; }
+      .desktop-shot { aspect-ratio: 1.8; object-fit: cover; object-position: left top; }
+      .phone-shot { right: var(--preview-inset); bottom: 0; width: 72px; border-width: 4px; border-radius: 16px; }
+      .showcase[data-preview="client"] { min-height: calc(clamp(146px, 42vw, 176px) * 2.223 + 64px); }
+      .showcase[data-preview="client"] .phone-shot { top: 64px; width: clamp(146px, 42vw, 176px); }
+      .phone-shot img { border-radius: 12px; }
+      .trust-line { justify-content: flex-start; gap: 7px 12px; max-width: 600px; margin-inline: auto; font-size: 9px; }
+      .section { padding: 78px 0; }
+      .section-head { display: block; margin-bottom: 27px; }
+      h2 { font-size: 35px; }
+      .section-head p { margin-top: 15px; font-size: 13px; }
+      #routes { min-height: 0; }
+      .route-demo { display: flex; flex-direction: column; min-height: 0; }
+      .route-controls { display: grid; grid-template-columns: 1fr 1fr; padding: 16px 12px 11px; border: 0; border-bottom: 1px solid #ffffff1b; }
+      .control-label { grid-column: 1/-1; padding: 0 7px 4px; }
+      .route-option { gap: 8px; padding: 10px 8px; }
+      .route-option strong { font-size: 10px; }
+      .route-option small { font-size: 9px; }
+      .topology { min-height: 310px; padding: 18px 14px 14px; }
+      .topology-top { align-items: flex-start; flex-direction: column; gap: 12px; }
+      .scenario-switch button { min-height: 44px; }
+      .topology-canvas { min-height: 180px; }
+      .node { width: 90%; padding: 13px 5px; }
+      .node .node-mark { width: 30px; height: 30px; margin-bottom: 8px; }
+      .node strong { font-size: 8px; }
+      .node small { font-size: 8px; }
+      .topology-foot { align-items: flex-start; gap: 10px; }
+      .route-explainer { font-size: 10px; }
+      .route-badge { font-size: 8px; }
+      .capability-grid, .deploy-grid { grid-template-columns: 1fr; gap: 9px; }
+      .capability { min-height: 0; padding: 20px 18px; }
+      .capability-index { margin-bottom: 25px; }
+      .agent-list { grid-template-columns: 1fr; gap: 9px; }
+      .agent-list-head { margin-top: 30px; }
+      .agent-row { min-height: 126px; grid-template-columns: 48px minmax(0, 1fr); padding: 19px 18px; }
+      .agent-brand img { width: 42px; height: 42px; padding: 8px; }
+      .agent-brand strong { font-size: 16px; }
+      .agent-row > span { font-size: 10px; }
+      .agent-row b { top: 15px; right: 15px; }
+      .deploy-item { min-height: 0; padding: 19px 18px; }
+      .runtime-stats { gap: 12px; margin-top: 20px; }
+      .runtime-stat strong { font-size: 25px; }
+      .security-panel { display: block; padding: 22px 19px; }
+      .security-panel p { margin-top: 16px; }
+      .closing { padding: 54px 0; }
+      .closing-inner { align-items: flex-start; flex-direction: column; }
+      .closing h2 { font-size: 32px; }
+      .closing p { font-size: 12px; }
+      .footer-inner { flex-direction: column; }
+    }
+    @media (max-width: 420px) {
+      .hero { gap: 13px; padding-top: 25px; }
+      h1 { font-size: 38px; }
+      .hero-copy p { font-size: 12px; line-height: 1.55; }
+      .hero-actions { margin-top: 12px; }
+      .showcase { --preview-inset: 32px; }
+      .phone-shot { width: 68px; }
+      .preview-switch button { min-height: 44px; padding-inline: 6px; }
+      .trust-line { font-size: 8px; }
+      .topology-foot { flex-direction: column; }
+    }
+    @media (max-width: 360px) {
+      .hero { gap: 8px; padding-top: 16px; }
+      h1 { font-size: 34px; line-height: 1.18; }
+      .hero-actions { margin-top: 8px; }
+      .showcase { padding-bottom: 0; }
+      .phone-shot { width: 60px; }
+      .trust-line { display: none; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; }
+      .desktop-shot, .phone-shot { transition: none; }
     }
   </style>
 </head>
 <body>
   <header class="site-header">
     <nav class="nav wrap" aria-label="Primary navigation">
-      <a class="brand" href="#top"><img src="assets/remoteaisync_icon.svg" alt=""><span>RemoteAISync</span></a>
+      <a class="brand" href="#top"><img src="assets/remoteaisync_icon.svg" width="34" height="34" alt=""><span>RemoteAISync</span></a>
       <div class="nav-links">
         <a href="#routes" data-zh="连接方式" data-en="Connections">连接方式</a>
         <a href="#about" data-zh="产品" data-en="Product">产品</a>
@@ -226,21 +534,27 @@
   </header>
 
   <main id="top">
-    <section class="hero wrap" id="about">
-      <canvas class="wavefield" id="wavefield" aria-hidden="true"></canvas>
+    <section class="hero wrap" id="about" data-enter>
       <div class="hero-copy">
         <div class="eyebrow" data-zh="自托管 · 你的 Agent，你的机器" data-en="SELF-HOSTED · YOUR AGENT, YOUR MACHINE">自托管 · 你的 Agent，你的机器</div>
-        <h1 data-zh="Agent 留在主机，<br>工作不必留在桌前。" data-en="Your Agent stays home.<br>Your work goes with you.">Agent 留在主机，<br>工作不必留在桌前。</h1>
+        <h1 data-zh="自托管 Agent 控制台，<br><span class=&quot;accent&quot;>你随时接手。</span>" data-en="Your self-hosted Agent console.<br><span class=&quot;accent&quot;>You stay in control.</span>">自托管 Agent 控制台，<br><span class="accent">你随时接手。</span></h1>
         <p data-zh="从手机或浏览器继续使用本机的 OpenCode、Codex 与 Claude Code。项目文件和 Agent 运行在你控制的电脑或服务器上。" data-en="Continue your local OpenCode, Codex, and Claude Code sessions from a phone or browser. Your projects and Agents stay on a computer or server you control.">从手机或浏览器继续使用本机的 OpenCode、Codex 与 Claude Code。项目文件和 Agent 运行在你控制的电脑或服务器上。</p>
         <div class="hero-actions">
           <a class="button" href="#routes" data-zh="了解连接方式" data-en="Explore connections">了解连接方式</a>
           <a class="button secondary" href="https://github.com/xiaoshijourney/RemoteAISync" target="_blank" rel="noreferrer">GitHub <span aria-hidden="true">↗</span></a>
         </div>
       </div>
-      <div class="showcase" aria-label="RemoteAISync running on desktop and Android">
-        <img class="desktop-shot" src="assets/desktop-host-overview.png" alt="RemoteAISync Windows host console showing the running host and available Agents">
-        <div class="phone-shot"><img src="assets/ras-home.png" alt="RemoteAISync Android client session view"></div>
-        <div class="showcase-caption" data-zh="真实产品界面 · Windows 主机与 Android 客户端" data-en="REAL PRODUCT UI · WINDOWS HOST + ANDROID CLIENT">真实产品界面 · Windows 主机与 Android 客户端</div>
+      <div class="showcase" data-preview="both" aria-label="RemoteAISync running on desktop and Android">
+        <div class="preview-toolbar">
+          <span class="preview-label">REMOTE AISYNC / UI PREVIEW</span>
+          <div class="preview-switch" role="group" aria-label="界面预览模式">
+            <button type="button" data-preview-mode="both" aria-pressed="true" data-zh="双端" data-en="Both">双端</button>
+            <button type="button" data-preview-mode="host" aria-pressed="false" data-zh="主机" data-en="Host">主机</button>
+            <button type="button" data-preview-mode="client" aria-pressed="false" data-zh="客户端" data-en="Client">客户端</button>
+          </div>
+        </div>
+        <img class="desktop-shot" src="assets/host-agent-status.png" width="1902" height="1071" fetchpriority="high" decoding="async" alt="RemoteAISync Windows host console showing the running host and supported Agent status">
+        <div class="phone-shot"><img src="assets/client-codex-session.jpg" width="1080" height="2400" fetchpriority="high" decoding="async" alt="RemoteAISync Android client showing a Codex session"></div>
       </div>
       <div class="trust-line" aria-label="Product properties">
         <span data-zh="本机运行 Agent" data-en="Agents run locally">本机运行 Agent</span>
@@ -257,7 +571,7 @@
           <p data-zh="同一局域网时直接连接主机。异地访问时，可让主机主动连到你自己的 Relay；如果 Agent 本来就运行在公网服务器，也可以直接使用 WSS。" data-en="Connect directly when you're on the same network. For remote access, let your host open an outbound tunnel to your own relay—or connect over WSS when the Agent already runs on a public server.">同一局域网时直接连接主机。异地访问时，可让主机主动连到你自己的 Relay；如果 Agent 本来就运行在公网服务器，也可以直接使用 WSS。</p>
         </div>
 
-        <div class="route-demo reveal" id="routeDemo" data-route="lan" data-host="home">
+        <div class="route-demo reveal" id="routeDemo" data-route="lan" data-host="home" data-visual="connection-topology">
           <div class="route-controls">
             <div class="control-label" data-zh="连接路线" data-en="CONNECTION ROUTE">连接路线</div>
             <button class="route-option" type="button" data-select-route="lan" aria-pressed="true">
@@ -275,10 +589,10 @@
                 <button type="button" data-select-host="public" aria-pressed="false" data-zh="公网主机" data-en="Public host">公网主机</button>
               </div>
             </div>
-            <div class="topology-canvas">
-              <div class="node client-node"><span class="node-mark"><img src="assets/remoteaisync_icon.svg" alt=""></span><strong>RAS CLIENT</strong><small data-zh="手机 / 浏览器" data-en="Phone / browser">手机 / 浏览器</small></div>
+            <div class="topology-canvas" data-ui="connection-map">
+              <div class="node client-node"><span class="node-mark"><img src="assets/remoteaisync_icon.svg" width="38" height="38" loading="lazy" decoding="async" alt=""></span><strong>RAS CLIENT</strong><small data-zh="手机 / 浏览器" data-en="Phone / browser">手机 / 浏览器</small></div>
               <div class="node relay-node"><span class="node-mark" aria-hidden="true">R</span><strong>SELF-HOSTED RELAY</strong><small data-zh="由你部署和管理" data-en="Operated by you">由你部署和管理</small></div>
-              <div class="node host-node"><span class="node-mark"><img src="assets/remoteaisync_icon.svg" alt=""></span><strong data-host-label>AGENT HOST</strong><small data-host-detail data-zh="你的电脑 · Agent 与项目" data-en="Your computer · Agent + project">你的电脑 · Agent 与项目</small></div>
+              <div class="node host-node"><span class="node-mark"><img src="assets/remoteaisync_icon.svg" width="38" height="38" loading="lazy" decoding="async" alt=""></span><strong data-host-label>AGENT HOST</strong><small data-host-detail data-zh="你的电脑 · Agent 与项目" data-en="Your computer · Agent + project">你的电脑 · Agent 与项目</small></div>
               <div class="connection" aria-hidden="true"><span class="packet"></span></div>
             </div>
             <div class="topology-foot">
@@ -296,15 +610,16 @@
           <div><div class="kicker">A QUIET CONTROL PLANE</div><h2 data-zh="把控制面带走，<br>把运行环境留下。" data-en="Take the control plane.<br>Keep the runtime where it is.">把控制面带走，<br>把运行环境留下。</h2></div>
           <p data-zh="RemoteAISync 连接的是你已经在使用的 Agent 和项目目录。手机负责查看、发送和审批，主机继续负责执行。" data-en="RemoteAISync connects to the Agents and project directories you already use. The phone handles viewing, sending, and approvals while the host keeps executing.">RemoteAISync 连接的是你已经在使用的 Agent 和项目目录。手机负责查看、发送和审批，主机继续负责执行。</p>
         </div>
-        <div class="capability-grid reveal">
-          <article class="capability"><span class="capability-index">01</span><h3 data-zh="会话控制" data-en="Session control">会话控制</h3><p data-zh="新建或继续会话，查看回复、工具调用、审批和提问状态。" data-en="Start or continue sessions and follow replies, tool calls, approvals, and questions.">新建或继续会话，查看回复、工具调用、审批和提问状态。</p></article>
-          <article class="capability"><span class="capability-index">02</span><h3 data-zh="文件往返" data-en="File handoff">文件往返</h3><p data-zh="从手机选择文件，传到主机工作区，再交给对应 Agent 处理。" data-en="Pick files on your phone, deliver them to the host workspace, and hand them to the selected Agent.">从手机选择文件，传到主机工作区，再交给对应 Agent 处理。</p></article>
-          <article class="capability"><span class="capability-index">03</span><h3 data-zh="状态透明" data-en="Visible state">状态透明</h3><p data-zh="连接路线、主机状态和 Agent 可用性在同一套界面里保持可见。" data-en="Route, host status, and Agent availability stay visible in one coherent interface.">连接路线、主机状态和 Agent 可用性在同一套界面里保持可见。</p></article>
+        <div class="capability-grid reveal" data-visual="capabilities">
+          <article class="capability"><span class="capability-index">01</span><div class="capability-visual" data-ui="session-state" aria-hidden="true"><span></span><span></span><span></span></div><h3 data-zh="会话控制" data-en="Session control">会话控制</h3><p data-zh="新建或继续会话，查看回复、工具调用、审批和提问状态。" data-en="Start or continue sessions and follow replies, tool calls, approvals, and questions.">新建或继续会话，查看回复、工具调用、审批和提问状态。</p></article>
+          <article class="capability"><span class="capability-index">02</span><div class="capability-visual" data-ui="file-state" aria-hidden="true"><span></span><span></span><span></span></div><h3 data-zh="文件往返" data-en="File handoff">文件往返</h3><p data-zh="从手机选择文件，传到主机工作区，再交给对应 Agent 处理。" data-en="Pick files on your phone, deliver them to the host workspace, and hand them to the selected Agent.">从手机选择文件，传到主机工作区，再交给对应 Agent 处理。</p></article>
+          <article class="capability"><span class="capability-index">03</span><div class="capability-visual" data-ui="status-state" aria-hidden="true"><span></span><span></span><span></span></div><h3 data-zh="状态透明" data-en="Visible state">状态透明</h3><p data-zh="连接路线、主机状态和 Agent 可用性在同一套界面里保持可见。" data-en="Route, host status, and Agent availability stay visible in one coherent interface.">连接路线、主机状态和 Agent 可用性在同一套界面里保持可见。</p></article>
         </div>
-        <div class="agent-list reveal" aria-label="Supported agents">
-          <div class="agent-row"><div class="agent-brand"><img src="assets/remoteaisync_icon.svg" alt=""><strong>OpenCode</strong></div><span data-zh="本机 Server API · 新建、继续、停止与模型设置" data-en="Local Server API · start, continue, stop, and model settings">本机 Server API · 新建、继续、停止与模型设置</span><b data-zh="可用" data-en="Ready">可用</b></div>
-          <div class="agent-row"><div class="agent-brand"><img src="assets/remoteaisync_icon.svg" alt=""><strong>Codex</strong></div><span data-zh="app-server 会话 · 模型、思考强度、审批与提问" data-en="App-server sessions · model, reasoning, approvals, and questions">app-server 会话 · 模型、思考强度、审批与提问</span><b data-zh="可用" data-en="Ready">可用</b></div>
-          <div class="agent-row"><div class="agent-brand"><img src="assets/remoteaisync_icon.svg" alt=""><strong>Claude Code</strong></div><span data-zh="CLI / JSONL 同步 · 由主机创建的任务可停止和继续" data-en="CLI / JSONL sync · host-created tasks can be stopped and continued">CLI / JSONL 同步 · 由主机创建的任务可停止和继续</span><b data-zh="可用" data-en="Ready">可用</b></div>
+        <div class="agent-list-head reveal"><strong data-zh="已适配 Agent" data-en="Supported agents">已适配 Agent</strong><span data-zh="三种运行方式 · 同一套控制面" data-en="Three runtimes · one control plane">三种运行方式 · 同一套控制面</span></div>
+        <div class="agent-list reveal" data-visual="supported-agents" data-ui="agent-roster" aria-label="Supported agents">
+          <div class="agent-row"><div class="agent-brand"><img src="assets/agents/opencode.svg" width="48" height="48" loading="lazy" decoding="async" alt="OpenCode logo"><strong>OpenCode</strong></div><span data-zh="本机 Server API · 新建、继续、停止与模型设置" data-en="Local Server API · start, continue, stop, and model settings">本机 Server API · 新建、继续、停止与模型设置</span><b data-zh="已适配" data-en="SUPPORTED">已适配</b></div>
+          <div class="agent-row"><div class="agent-brand"><img src="assets/agents/codex.svg" width="48" height="48" loading="lazy" decoding="async" alt="Codex logo"><strong>Codex</strong></div><span data-zh="app-server 会话 · 模型、思考强度、审批与提问" data-en="App-server sessions · model, reasoning, approvals, and questions">app-server 会话 · 模型、思考强度、审批与提问</span><b data-zh="已适配" data-en="SUPPORTED">已适配</b></div>
+          <div class="agent-row"><div class="agent-brand"><img src="assets/agents/claude.svg" width="48" height="48" loading="lazy" decoding="async" alt="Claude Code logo"><strong>Claude Code</strong></div><span data-zh="CLI / JSONL 同步 · 由主机创建的任务可停止和继续" data-en="CLI / JSONL sync · host-created tasks can be stopped and continued">CLI / JSONL 同步 · 由主机创建的任务可停止和继续</span><b data-zh="已适配" data-en="SUPPORTED">已适配</b></div>
         </div>
       </div>
     </section>
@@ -315,10 +630,15 @@
           <div><div class="kicker">ONE PROJECT, THREE DEPLOYMENTS</div><h2 data-zh="从家里开始，<br>到公网也不换思路。" data-en="Start at home.<br>Keep the same model in production.">从家里开始，<br>到公网也不换思路。</h2></div>
           <p data-zh="Windows 主机 GUI、Ubuntu 无头运行时和 Web / Android 客户端共享同一套连接与配对逻辑。" data-en="The Windows host GUI, Ubuntu headless runtime, and Web / Android clients share one connection and pairing model.">Windows 主机 GUI、Ubuntu 无头运行时和 Web / Android 客户端共享同一套连接与配对逻辑。</p>
         </div>
-        <div class="deploy-grid reveal">
-          <article class="deploy-item"><span class="deploy-icon">W</span><div><h3>Windows</h3><p data-zh="主机或中继模式。适合本地开发、局域网配对和桌面管理。" data-en="Host or relay mode for local development, LAN pairing, and desktop management.">主机或中继模式。适合本地开发、局域网配对和桌面管理。</p></div><code>Flutter GUI</code></article>
-          <article class="deploy-item"><span class="deploy-icon">U</span><div><h3>Ubuntu</h3><p data-zh="同一软件以无头模式运行，可交给 systemd 管理并放在公网服务器。" data-en="Run the same software headlessly under systemd on a private or public server.">同一软件以无头模式运行，可交给 systemd 管理并放在公网服务器。</p></div><code>host / relay</code></article>
-          <article class="deploy-item"><span class="deploy-icon">A</span><div><h3>Web + Android</h3><p data-zh="扫码导入配对信息，局域网优先，中继兜底，保留手动配置。" data-en="Import pairing by QR, prefer LAN, fall back to relay, and keep manual setup available.">扫码导入配对信息，局域网优先，中继兜底，保留手动配置。</p></div><code>client</code></article>
+        <div class="deploy-grid reveal" data-visual="deployment-states">
+          <article class="deploy-item"><span class="deploy-icon"><img src="assets/platforms/windows.svg" width="23" height="23" loading="lazy" decoding="async" alt=""></span><div><h3>Windows</h3><p data-zh="主机或中继模式。适合本地开发、局域网配对和桌面管理。" data-en="Host or relay mode for local development, LAN pairing, and desktop management.">主机或中继模式。适合本地开发、局域网配对和桌面管理。</p></div><div class="deploy-visual" data-ui="host-console" aria-hidden="true"><div class="deploy-visual-head"><span class="deploy-visual-title">HOST CONSOLE</span><span class="deploy-visual-status">ONLINE</span></div><span class="deploy-visual-line long"></span><span class="deploy-visual-line medium"></span></div><code>Flutter GUI</code></article>
+          <article class="deploy-item"><span class="deploy-icon"><img src="assets/platforms/ubuntu.svg" width="23" height="23" loading="lazy" decoding="async" alt=""></span><div><h3>Ubuntu</h3><p data-zh="同一软件以无头模式运行，可交给 systemd 管理并放在公网服务器。" data-en="Run the same software headlessly under systemd on a private or public server.">同一软件以无头模式运行，可交给 systemd 管理并放在公网服务器。</p></div><div class="deploy-visual" data-ui="systemd-service" aria-hidden="true"><div class="deploy-visual-head"><span class="deploy-visual-title">SYSTEMD SERVICE</span><span class="deploy-visual-status">RUNNING</span></div><span class="deploy-visual-line medium"></span><span class="deploy-visual-line short"></span></div><code>host / relay</code></article>
+          <article class="deploy-item"><span class="deploy-icon"><img src="assets/platforms/android.svg" width="23" height="23" loading="lazy" decoding="async" alt=""></span><div><h3>Web + Android</h3><p data-zh="扫码导入配对信息，局域网优先，中继兜底，保留手动配置。" data-en="Import pairing by QR, prefer LAN, fall back to relay, and keep manual setup available.">扫码导入配对信息，局域网优先，中继兜底，保留手动配置。</p></div><div class="deploy-visual" data-ui="pairing-link" aria-hidden="true"><div class="deploy-visual-head"><span class="deploy-visual-title">PAIRING LINK</span><span class="deploy-visual-status">READY</span></div><span class="deploy-visual-line short"></span><span class="deploy-visual-line long"></span></div><code>client</code></article>
+        </div>
+        <div class="runtime-stats" data-moment="counter-rolls" data-visual="runtime-stats" aria-label="Runtime summary">
+          <div class="runtime-stat"><strong class="t-stat">03</strong><span data-zh="已适配 Agent" data-en="Supported agents">已适配 Agent</span></div>
+          <div class="runtime-stat"><strong class="t-stat">02</strong><span data-zh="客户端形态" data-en="Client surfaces">客户端形态</span></div>
+          <div class="runtime-stat"><strong class="t-stat">01</strong><span data-zh="控制面" data-en="Control plane">控制面</span></div>
         </div>
         <div class="security-panel reveal"><div><div class="kicker">SECURITY BOUNDARY</div><h3 data-zh="公网使用 WSS，凭据按角色分发。" data-en="Use WSS in public networks. Scope credentials by role.">公网使用 WSS，凭据按角色分发。</h3></div><p data-zh="中继只负责转发连接。主机注册码、房间凭据和设备凭据分开管理；首版默认信任自建中继，后续再独立设计端到端加密。" data-en="The relay forwards connections. Host registration, room credentials, and device credentials stay separate. The first release trusts a self-hosted relay; end-to-end encryption is a separate follow-up design.">中继只负责转发连接。主机注册码、房间凭据和设备凭据分开管理；首版默认信任自建中继，后续再独立设计端到端加密。</p></div>
       </div>
@@ -327,12 +647,13 @@
     <section class="closing" id="start">
       <div class="wrap closing-inner reveal">
         <div><h2 data-zh="Agent 在你自己的机器上。" data-en="Your Agent. Your machine.">Agent 在你自己的机器上。</h2><p data-zh="从项目仓库开始：查看部署方式、Windows 开发启动步骤，或构建 Android 客户端。" data-en="Start from the repository: explore deployment, run the Windows development setup, or build the Android client.">从项目仓库开始：查看部署方式、Windows 开发启动步骤，或构建 Android 客户端。</p></div>
+        <div class="closing-status" data-visual="control-plane-status" data-ui="control-plane-status" aria-label="Agent host online"><span class="closing-status-mark">RAS</span><div><small>AGENT HOST</small><strong>REMOTE AISYNC</strong><b data-zh="主机在线 · 控制面已连接" data-en="Host online · control plane connected">主机在线 · 控制面已连接</b></div></div>
         <a class="button" href="https://github.com/xiaoshijourney/RemoteAISync" target="_blank" rel="noreferrer" data-zh="打开 GitHub 仓库 ↗" data-en="Open GitHub repository ↗">打开 GitHub 仓库 ↗</a>
       </div>
     </section>
   </main>
   <footer class="footer">
-    <div class="wrap footer-inner"><span>© 2026 RemoteAISync · MIT License</span><span><a href="https://github.com/xiaoshijourney/RemoteAISync" target="_blank" rel="noreferrer">GitHub</a>　·　Self-hosted, no cloud account required</span></div>
+    <div class="wrap footer-inner"><span>© 2026 RemoteAISync · MIT License</span><span><a href="https://github.com/xiaoshijourney/RemoteAISync" target="_blank" rel="noreferrer">GitHub</a>　·　Self-hosted, no cloud account required　·　Platform marks: <a href="https://fontawesome.com/license/free" target="_blank" rel="noreferrer">Font Awesome Free</a> (CC BY 4.0)</span></div>
   </footer>
 
   <script>
@@ -340,7 +661,6 @@
     const routeExplainer = document.getElementById('routeExplainer');
     const routeBadge = document.getElementById('routeBadge');
     const languageToggle = document.getElementById('languageToggle');
-    const wavefield = document.getElementById('wavefield');
     let language = 'zh';
     const routeCopy = {
       zh: {
@@ -371,8 +691,16 @@
         ? (language === 'zh' ? 'Ubuntu / VPS · Agent 与项目' : 'Ubuntu / VPS · Agent + project')
         : (language === 'zh' ? '你的电脑 · Agent 与项目' : 'Your computer · Agent + project');
     }
-    document.querySelectorAll('[data-select-route]').forEach((button) => button.addEventListener('click', () => { routeDemo.dataset.route = button.dataset.selectRoute; updateRoute(); }));
-    document.querySelectorAll('[data-select-host]').forEach((button) => button.addEventListener('click', () => { routeDemo.dataset.host = button.dataset.selectHost; updateRoute(); }));
+    function animateRouteChange() {
+      if (!window.gsap || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      const sequence = gsap.timeline({ defaults: { ease: 'power3.out' } });
+      sequence
+        .fromTo(routeBadge, { autoAlpha: 0.5, scale: 0.94 }, { autoAlpha: 1, scale: 1, duration: 0.3 })
+        .fromTo('.client-node, .host-node', { scale: 0.96 }, { scale: 1, duration: 0.28, stagger: 0.14 }, 0.02)
+        .fromTo('.relay-node', { scale: 0.92, autoAlpha: 0.6 }, { scale: 1, autoAlpha: 1, duration: 0.32 }, 0.16);
+    }
+    document.querySelectorAll('[data-select-route]').forEach((button) => button.addEventListener('click', () => { routeDemo.dataset.route = button.dataset.selectRoute; updateRoute(); animateRouteChange(); }));
+    document.querySelectorAll('[data-select-host]').forEach((button) => button.addEventListener('click', () => { routeDemo.dataset.host = button.dataset.selectHost; updateRoute(); animateRouteChange(); }));
     languageToggle.addEventListener('click', () => {
       language = language === 'zh' ? 'en' : 'zh';
       document.documentElement.lang = language === 'zh' ? 'zh-CN' : 'en';
@@ -380,61 +708,117 @@
       document.querySelectorAll('[data-zh][data-en]').forEach((node) => { node.innerHTML = node.dataset[language]; });
       updateRoute();
     });
-    const observer = new IntersectionObserver((entries) => entries.forEach((entry) => {
-      if (entry.isIntersecting) { entry.target.classList.add('is-visible'); observer.unobserve(entry.target); }
-    }), { threshold: .12 });
-    document.querySelectorAll('.reveal').forEach((element) => observer.observe(element));
-
-    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const waveState = { pointerX: .5, pointerY: .46, time: 0 };
-    const waveContext = wavefield.getContext('2d');
-    const hero = document.querySelector('.hero');
-    function resizeWavefield() {
-      const ratio = Math.min(window.devicePixelRatio || 1, 2);
-      const bounds = hero.getBoundingClientRect();
-      wavefield.width = Math.max(1, Math.floor(bounds.width * ratio));
-      wavefield.height = Math.max(1, Math.floor(bounds.height * ratio));
-      waveContext.setTransform(ratio, 0, 0, ratio, 0, 0);
-    }
-    function drawWavefield() {
-      const bounds = hero.getBoundingClientRect();
-      const width = bounds.width;
-      const height = bounds.height;
-      waveContext.clearRect(0, 0, width, height);
-      const pointerOffset = (waveState.pointerX - .5) * 28;
-      const verticalOffset = (waveState.pointerY - .5) * 13;
-      for (let row = -2; row < 24; row += 1) {
-        const baseY = height * .12 + row * 38;
-        waveContext.beginPath();
-        for (let x = -30; x <= width + 30; x += 12) {
-          const distance = Math.abs(x - width * waveState.pointerX) / width;
-          const flow = Math.sin(x * .0105 + waveState.time * .0008 + row * .34) * 10;
-          const ripple = Math.sin(x * .026 - waveState.time * .0011 + row * .2) * 3.5;
-          const focus = Math.exp(-distance * 3.2) * 8;
-          const y = baseY + flow + ripple + focus + verticalOffset;
-          if (x === -30) waveContext.moveTo(x + pointerOffset, y);
-          else waveContext.lineTo(x + pointerOffset, y);
-        }
-        const edgeFade = Math.max(0, 1 - Math.abs(row - 9) / 15);
-        waveContext.strokeStyle = row % 4 === 0 ? `rgba(89, 103, 94, ${.17 * edgeFade})` : `rgba(110, 116, 121, ${.075 * edgeFade})`;
-        waveContext.lineWidth = row % 4 === 0 ? 1.1 : .7;
-        waveContext.stroke();
-      }
-    }
-    function animateWavefield(timestamp) {
-      waveState.time = timestamp;
-      drawWavefield();
-      if (!reduceMotion.matches) window.requestAnimationFrame(animateWavefield);
-    }
-    hero.addEventListener('pointermove', (event) => {
-      const bounds = hero.getBoundingClientRect();
-      waveState.pointerX = Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width));
-      waveState.pointerY = Math.max(0, Math.min(1, (event.clientY - bounds.top) / bounds.height));
-    }, { passive: true });
-    window.addEventListener('resize', () => { resizeWavefield(); drawWavefield(); }, { passive: true });
-    resizeWavefield();
-    if (reduceMotion.matches) drawWavefield();
-    else window.requestAnimationFrame(animateWavefield);
   </script>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.15.1/dist/gsap.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.15.1/dist/ScrollTrigger.min.js"></script>
+  <script>
+    const preview = document.querySelector('.showcase');
+    const previewButtons = document.querySelectorAll('[data-preview-mode]');
+    const desktopShot = document.querySelector('.desktop-shot');
+    const phoneShot = document.querySelector('.phone-shot');
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+    function setPreview(mode) {
+      preview.dataset.preview = mode;
+      previewButtons.forEach((button) => {
+        button.setAttribute('aria-pressed', String(button.dataset.previewMode === mode));
+      });
+      if (!window.gsap || reduceMotion.matches) return;
+
+      const states = {
+        both: { desktop: { autoAlpha: 1, scale: 1, x: 0 }, phone: { autoAlpha: 1, scale: 1, x: 0, y: 0 } },
+        host: { desktop: { autoAlpha: 1, scale: 1.015, x: 0 }, phone: { autoAlpha: 0.24, scale: 0.88, x: 22, y: 0 } },
+        client: { desktop: { autoAlpha: 0.34, scale: 0.975, x: 0 }, phone: { autoAlpha: 1, scale: 1.08, x: 0, y: -7 } }
+      };
+      const transition = gsap.timeline({ defaults: { duration: 0.62, ease: 'power3.inOut', overwrite: 'auto' } });
+      transition
+        .to(desktopShot, states[mode].desktop, 0)
+        .to(phoneShot, states[mode].phone, 0.04)
+        .fromTo('.preview-label', { x: 5, autoAlpha: 0.65 }, { x: 0, autoAlpha: 1, duration: 0.36 }, 0.08);
+    }
+    previewButtons.forEach((button) => button.addEventListener('click', () => setPreview(button.dataset.previewMode)));
+
+    if (window.gsap && window.ScrollTrigger) {
+      gsap.registerPlugin(ScrollTrigger);
+      gsap.defaults({ ease: "power3.out" });
+
+      const motion = gsap.matchMedia();
+      motion.add("(prefers-reduced-motion: no-preference)", () => {
+        const entrance = gsap.timeline({ defaults: { ease: "power3.out" } });
+        entrance
+          .fromTo(".hero-copy .eyebrow", { autoAlpha: 0, y: 16 }, { autoAlpha: 1, y: 0, duration: 0.5 })
+          .fromTo(".hero-copy h1", { autoAlpha: 0, y: 32, clipPath: "inset(0 0 100% 0)" }, { autoAlpha: 1, y: 0, clipPath: "inset(0 0 0% 0)", duration: 0.8 }, "<0.12")
+          .fromTo(".hero-copy > p", { autoAlpha: 0, y: 18 }, { autoAlpha: 1, y: 0, duration: 0.56 }, "<0.16")
+          .fromTo(".hero-actions .button", { autoAlpha: 0, y: 14 }, { autoAlpha: 1, y: 0, duration: 0.46, stagger: 0.09 }, "<0.12")
+          .fromTo(".preview-toolbar", { autoAlpha: 0, y: 12 }, { autoAlpha: 1, y: 0, duration: 0.44 }, 0.12)
+          .fromTo(desktopShot, { autoAlpha: 0, y: 24, scale: 0.97, clipPath: "inset(0 100% 0 0)" }, { autoAlpha: 1, y: 0, scale: 1, clipPath: "inset(0 0% 0 0)", duration: 1.05 }, 0.3)
+          .fromTo(phoneShot, { autoAlpha: 0, y: 42, scale: 0.92 }, { autoAlpha: 1, y: 0, scale: 1, duration: 0.72 }, 0.82)
+          .fromTo(".trust-line span", { autoAlpha: 0, y: 9 }, { autoAlpha: 1, y: 0, duration: 0.35, stagger: 0.055 }, "<0.05");
+
+        gsap.to(phoneShot, { y: -5, duration: 2.1, ease: "sine.inOut", yoyo: true, repeat: 1, delay: 1.15 });
+
+        const pointerX = gsap.quickTo(phoneShot, 'x', { duration: 0.55, ease: 'power3.out' });
+        preview.addEventListener('pointermove', (event) => {
+          if (event.pointerType !== 'mouse') return;
+          const bounds = preview.getBoundingClientRect();
+          pointerX(((event.clientX - bounds.left) / bounds.width - 0.5) * 5);
+        });
+        preview.addEventListener('pointerleave', () => pointerX(0));
+
+        document.querySelectorAll('.capability, .deploy-item').forEach((item) => {
+          item.addEventListener('pointerenter', () => gsap.to(item, { y: -3, duration: 0.22, overwrite: 'auto' }));
+          item.addEventListener('pointerleave', () => gsap.to(item, { y: 0, duration: 0.3, overwrite: 'auto' }));
+        });
+
+        document.querySelectorAll('.agent-row').forEach((item) => {
+          item.addEventListener('pointerenter', () => gsap.to(item.querySelector('img'), { scale: 1.08, duration: 0.25, overwrite: 'auto' }));
+          item.addEventListener('pointerleave', () => gsap.to(item.querySelector('img'), { scale: 1, duration: 0.3, overwrite: 'auto' }));
+        });
+
+        const agentMoment = gsap.timeline({
+          scrollTrigger: {
+            trigger: '#agents',
+            start: 'top 68%',
+            end: 'center 38%',
+            scrub: 0.6
+          }
+        });
+        agentMoment
+          .fromTo('.agent-list-head', { y: 20, autoAlpha: .35 }, { y: 0, autoAlpha: 1, ease: 'none' }, 0)
+          .fromTo('.agent-row', { y: 24, scale: .98, autoAlpha: .45 }, { y: 0, scale: 1, autoAlpha: 1, stagger: .12, ease: 'none' }, .08)
+          .fromTo('.agent-row b', { scale: .8 }, { scale: 1, stagger: .12, ease: 'back.out(1.5)' }, .2);
+
+        const deployMoment = gsap.timeline({
+          scrollTrigger: {
+            trigger: '#deploy',
+            start: 'top 72%',
+            end: 'center 42%',
+            scrub: 0.7
+          }
+        });
+        deployMoment
+          .fromTo('.deploy-item', { y: 22, autoAlpha: .5 }, { y: 0, autoAlpha: 1, stagger: .14, ease: 'none' }, 0)
+          .fromTo('.deploy-visual-line', { scaleX: .2, transformOrigin: 'left center' }, { scaleX: 1, stagger: .08, ease: 'none' }, .16)
+          .fromTo('.security-panel', { y: 20, autoAlpha: .45 }, { y: 0, autoAlpha: 1, ease: 'none' }, .56);
+
+        gsap.to('.closing-status-mark', { boxShadow: '0 0 0 8px #ffffff08', duration: 1.8, repeat: -1, yoyo: true, ease: 'sine.inOut' });
+
+        const routeMoment = gsap.timeline({
+          scrollTrigger: {
+            trigger: "#routes",
+            start: "top 72%",
+            end: "center 42%",
+            scrub: 0.7
+          }
+        });
+        routeMoment
+          .fromTo(".connection .packet", { xPercent: 0 }, { xPercent: 100, ease: "none" }, 0)
+          .fromTo(".relay-node", { y: 10, scale: 0.94 }, { y: -3, scale: 1, ease: "none" }, 0);
+      });
+
+      window.addEventListener("load", () => ScrollTrigger.refresh(), { once: true });
+    }
+  </script>
+  <script type="module" src="assets/moments/moments.js"></script>
 </body>
 </html>

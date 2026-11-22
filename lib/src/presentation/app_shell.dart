@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import '../application/demo_controller.dart';
+import '../application/saved_connection_profile.dart';
 import '../domain/models.dart';
 import 'components/glass_surface.dart';
 import 'screens/connection_screen.dart';
@@ -18,53 +21,87 @@ class AppShell extends StatefulWidget {
   State<AppShell> createState() => _AppShellState();
 }
 
-class _AppShellState extends State<AppShell> {
+class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   int _selectedIndex = 0;
-  late final List<Widget> _pageWidgets = [
+  bool _keyboardOpen = false;
+  double _viewportWidth = 0;
+  final PageStorageBucket _pageStorageBucket = PageStorageBucket();
+  late final Future<SavedConnectionProfile?> _savedConnection;
+  late Widget _pageStackContent;
+  late final List<Widget?> _pageWidgets = [
     SessionScreen(controller: widget.controller),
-    FilesScreen(controller: widget.controller),
-    ConnectionScreen(controller: widget.controller),
+    null,
+    null,
   ];
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _savedConnection = SavedConnectionProfile.restore(widget.controller);
+    unawaited(_savedConnection);
+    _pageStackContent = _buildPageStackContent();
+    final views = WidgetsBinding.instance.platformDispatcher.views;
+    if (views.isNotEmpty) {
+      final view = views.first;
+      _viewportWidth = view.physicalSize.width / view.devicePixelRatio;
+      _keyboardOpen = view.viewInsets.bottom > 0;
+    }
+  }
+
+  @override
+  void didChangeMetrics() {
+    final views = WidgetsBinding.instance.platformDispatcher.views;
+    if (views.isEmpty) return;
+    final view = views.first;
+    final width = view.physicalSize.width / view.devicePixelRatio;
+    final keyboardOpen = view.viewInsets.bottom > 0;
+    if (_viewportWidth == width && _keyboardOpen == keyboardOpen) return;
+    setState(() {
+      _viewportWidth = width;
+      _keyboardOpen = keyboardOpen;
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: widget.controller,
-      builder: (context, _) => LayoutBuilder(
-        builder: (context, constraints) {
-          final desktop = constraints.maxWidth >= 900;
-          return Scaffold(
-            // Keep the shell geometry stable while the IME animates. Only the
-            // mobile content region below consumes the changing inset.
-            resizeToAvoidBottomInset: true,
-            body: SafeArea(
-              bottom: false,
-              child: desktop
-                  ? _DesktopWorkspace(
-                      controller: widget.controller,
-                      selectedIndex: _selectedIndex,
-                      onSelected: _selectPage,
-                      child: _pageStack(),
-                    )
-                  : _MobileWorkspace(
-                      controller: widget.controller,
-                      selectedIndex: _selectedIndex,
-                      onSelected: _selectPage,
-                      child: _pageStack(),
-                    ),
-            ),
-            bottomNavigationBar: desktop
-                ? null
-                : MediaQuery.viewInsetsOf(context).bottom > 0
-                ? null
-                : _MobileNavigation(
-                    selectedIndex: _selectedIndex,
-                    pendingCount: _pendingCount,
-                    onSelected: _selectPage,
-                  ),
-          );
-        },
+    final desktop = _viewportWidth >= 900;
+    final pageStack = _pageStack();
+    return Scaffold(
+      resizeToAvoidBottomInset: true,
+      body: SafeArea(
+        bottom: false,
+        child: desktop
+            ? _DesktopWorkspace(
+                controller: widget.controller,
+                selectedIndex: _selectedIndex,
+                onSelected: _selectPage,
+                child: pageStack,
+              )
+            : _MobileWorkspace(
+                controller: widget.controller,
+                selectedIndex: _selectedIndex,
+                keyboardOpen: _keyboardOpen,
+                onSelected: _selectPage,
+                child: pageStack,
+              ),
       ),
+      bottomNavigationBar: desktop || _keyboardOpen
+          ? null
+          : AnimatedBuilder(
+              animation: widget.controller,
+              builder: (context, _) => _MobileNavigation(
+                selectedIndex: _selectedIndex,
+                pendingCount: _pendingCount,
+                onSelected: _selectPage,
+              ),
+            ),
     );
   }
 
@@ -74,8 +111,40 @@ class _AppShellState extends State<AppShell> {
   void _selectPage(int index) {
     if (_selectedIndex == index) return;
     FocusManager.instance.primaryFocus?.unfocus();
-    setState(() => _selectedIndex = index);
+    _pageWidgets[index] ??= _createPage(index);
+    setState(() {
+      _selectedIndex = index;
+      _pageStackContent = _buildPageStackContent();
+    });
   }
+
+  Widget _createPage(int index) => switch (index) {
+    0 => SessionScreen(controller: widget.controller),
+    1 => FilesScreen(controller: widget.controller),
+    2 => ConnectionScreen(
+      controller: widget.controller,
+      savedConnection: _savedConnection,
+    ),
+    _ => throw RangeError.index(index, _pageWidgets),
+  };
+
+  Widget _buildPageStackContent() => PageStorage(
+    bucket: _pageStorageBucket,
+    child: IndexedStack(
+      index: _selectedIndex,
+      sizing: StackFit.expand,
+      children: [
+        for (var index = 0; index < _pageWidgets.length; index++)
+          TickerMode(
+            enabled: index == _selectedIndex,
+            child: KeyedSubtree(
+              key: ValueKey('workspace-page-$index'),
+              child: _pageWidgets[index] ?? const SizedBox.shrink(),
+            ),
+          ),
+      ],
+    ),
+  );
 
   Widget _pageStack() => LayoutBuilder(
     builder: (context, constraints) {
@@ -96,7 +165,9 @@ class _AppShellState extends State<AppShell> {
         child: SizedBox(
           width: width,
           height: constraints.maxHeight.clamp(1.0, double.infinity),
-          child: IndexedStack(index: _selectedIndex, children: _pageWidgets),
+          // Preserve the page subtree while Scaffold resizes for the IME.
+          // Only the viewport's render layout should run through keyboard frames.
+          child: _pageStackContent,
         ),
       );
     },
@@ -128,15 +199,22 @@ class _DesktopWorkspace extends StatelessWidget {
               children: [
                 _BrandIdentity(),
                 const SizedBox(height: 22),
-                _NavigationItems(
-                  selectedIndex: selectedIndex,
-                  pendingCount:
-                      controller.forms.length + controller.permissions.length,
-                  onSelected: onSelected,
-                  vertical: true,
+                AnimatedBuilder(
+                  animation: controller,
+                  builder: (context, _) => _NavigationItems(
+                    selectedIndex: selectedIndex,
+                    pendingCount:
+                        controller.forms.length + controller.permissions.length,
+                    onSelected: onSelected,
+                    vertical: true,
+                  ),
                 ),
                 const Spacer(),
-                _HostStatusPanel(controller: controller),
+                AnimatedBuilder(
+                  animation: controller,
+                  builder: (context, _) =>
+                      _HostStatusPanel(controller: controller),
+                ),
               ],
             ),
           ),
@@ -150,23 +228,35 @@ class _DesktopWorkspace extends StatelessWidget {
                   controller: controller,
                   selectedIndex: selectedIndex,
                 ),
-                if (!controller.isDemo && !controller.isLive) ...[
-                  const SizedBox(height: 10),
-                  _ConnectionBanner(
-                    controller: controller,
-                    onPressed: () => onSelected(2),
-                  ),
-                ],
-                if (selectedIndex != 0 &&
-                    (controller.forms.isNotEmpty ||
-                        controller.permissions.isNotEmpty)) ...[
-                  const SizedBox(height: 10),
-                  _PendingBanner(
-                    count:
-                        controller.forms.length + controller.permissions.length,
-                    onPressed: () => onSelected(0),
-                  ),
-                ],
+                AnimatedBuilder(
+                  animation: controller,
+                  builder: (context, _) =>
+                      !controller.isDemo && !controller.isLive
+                      ? Padding(
+                          padding: const EdgeInsets.only(top: 10),
+                          child: _ConnectionBanner(
+                            controller: controller,
+                            onPressed: () => onSelected(2),
+                          ),
+                        )
+                      : const SizedBox.shrink(),
+                ),
+                AnimatedBuilder(
+                  animation: controller,
+                  builder: (context, _) {
+                    final count =
+                        controller.forms.length + controller.permissions.length;
+                    return selectedIndex != 0 && count > 0
+                        ? Padding(
+                            padding: const EdgeInsets.only(top: 10),
+                            child: _PendingBanner(
+                              count: count,
+                              onPressed: () => onSelected(0),
+                            ),
+                          )
+                        : const SizedBox.shrink();
+                  },
+                ),
                 const SizedBox(height: 10),
                 Expanded(child: child),
               ],
@@ -182,38 +272,51 @@ class _MobileWorkspace extends StatelessWidget {
   const _MobileWorkspace({
     required this.controller,
     required this.selectedIndex,
+    required this.keyboardOpen,
     required this.onSelected,
     required this.child,
   });
 
   final DemoController controller;
   final int selectedIndex;
+  final bool keyboardOpen;
   final ValueChanged<int> onSelected;
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
     return Column(
       children: [
         if (!keyboardOpen) _MobileTopBar(controller: controller),
-        if (!keyboardOpen && !controller.isDemo && !controller.isLive)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-            child: _ConnectionBanner(
-              controller: controller,
-              onPressed: () => onSelected(2),
-            ),
+        if (!keyboardOpen)
+          AnimatedBuilder(
+            animation: controller,
+            builder: (context, _) => !controller.isDemo && !controller.isLive
+                ? Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                    child: _ConnectionBanner(
+                      controller: controller,
+                      onPressed: () => onSelected(2),
+                    ),
+                  )
+                : const SizedBox.shrink(),
           ),
-        if (!keyboardOpen &&
-            selectedIndex != 0 &&
-            (controller.forms.isNotEmpty || controller.permissions.isNotEmpty))
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-            child: _PendingBanner(
-              count: controller.forms.length + controller.permissions.length,
-              onPressed: () => onSelected(0),
-            ),
+        if (!keyboardOpen && selectedIndex != 0)
+          AnimatedBuilder(
+            animation: controller,
+            builder: (context, _) {
+              final count =
+                  controller.forms.length + controller.permissions.length;
+              return count > 0
+                  ? Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                      child: _PendingBanner(
+                        count: count,
+                        onPressed: () => onSelected(0),
+                      ),
+                    )
+                  : const SizedBox.shrink();
+            },
           ),
         Expanded(child: child),
       ],
@@ -282,7 +385,10 @@ class _DesktopTopBar extends StatelessWidget {
           ),
         ),
         const Spacer(),
-        _ConnectionStatus(controller: controller),
+        AnimatedBuilder(
+          animation: controller,
+          builder: (context, _) => _ConnectionStatus(controller: controller),
+        ),
       ],
     ),
   );
@@ -304,7 +410,11 @@ class _MobileTopBar extends StatelessWidget {
         children: [
           const Expanded(child: _BrandIdentity(compact: true)),
           const SizedBox(width: 8),
-          _ConnectionStatus(controller: controller, compact: true),
+          AnimatedBuilder(
+            animation: controller,
+            builder: (context, _) =>
+                _ConnectionStatus(controller: controller, compact: true),
+          ),
         ],
       ),
     ),

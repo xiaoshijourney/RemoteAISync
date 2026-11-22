@@ -1445,8 +1445,6 @@ class AgentBridge {
         if (sessionId == null ||
             sessionId != client.selectedSessionId ||
             session.isEmpty ||
-            (session.first.agentId == 'codex' &&
-                !session.first.remoteManaged) ||
             (session.first.agentId == 'claude' &&
                 !session.first.remoteManaged) ||
             (session.first.agentId != 'codex' &&
@@ -1467,7 +1465,7 @@ class AgentBridge {
             );
             _runningOpenCodeSessions.remove(sessionId);
           } else if (session.first.agentId == 'codex') {
-            await codex!.interrupt(sessionId);
+            await codex!.interruptIfRunning(sessionId);
           } else {
             await claude!.interruptSession(sessionId);
           }

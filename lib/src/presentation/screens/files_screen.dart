@@ -22,7 +22,8 @@ class FilesScreen extends StatefulWidget {
   State<FilesScreen> createState() => _FilesScreenState();
 }
 
-class _FilesScreenState extends State<FilesScreen> {
+class _FilesScreenState extends State<FilesScreen>
+    with AutomaticKeepAliveClientMixin<FilesScreen> {
   final _search = TextEditingController();
   String? _path;
   String _query = '';
@@ -35,11 +36,18 @@ class _FilesScreenState extends State<FilesScreen> {
   bool _loadRequested = false;
   final Set<String> _selectedPaths = <String>{};
   bool _wasConnected = false;
+  String? _observedWorkspaceDirectory;
+  bool _observedAllSessionsScope = false;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
     super.initState();
     _wasConnected = widget.controller.isLive;
+    _observedWorkspaceDirectory = widget.controller.workspaceDirectory;
+    _observedAllSessionsScope = widget.controller.allSessionsScope;
     widget.controller.addListener(_onControllerChanged);
     if (_wasConnected) {
       _scheduleInitialLoad();
@@ -55,6 +63,8 @@ class _FilesScreenState extends State<FilesScreen> {
     widget.controller.addListener(_onControllerChanged);
     _loadGeneration++;
     _wasConnected = widget.controller.isLive;
+    _observedWorkspaceDirectory = widget.controller.workspaceDirectory;
+    _observedAllSessionsScope = widget.controller.allSessionsScope;
     _path = null;
     _entries = const [];
     _loading = false;
@@ -92,6 +102,16 @@ class _FilesScreenState extends State<FilesScreen> {
         _loading = false;
         _loadRequested = false;
       });
+    } else {
+      final workspaceDirectory = widget.controller.workspaceDirectory;
+      final allSessionsScope = widget.controller.allSessionsScope;
+      if (workspaceDirectory == _observedWorkspaceDirectory &&
+          allSessionsScope == _observedAllSessionsScope) {
+        return;
+      }
+      _observedWorkspaceDirectory = workspaceDirectory;
+      _observedAllSessionsScope = allSessionsScope;
+      setState(() {});
     }
   }
 
@@ -171,6 +191,7 @@ class _FilesScreenState extends State<FilesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final compact = MediaQuery.sizeOf(context).width < 420;
     if (!widget.controller.isLive) {
       return SizedBox.expand(
@@ -188,9 +209,7 @@ class _FilesScreenState extends State<FilesScreen> {
               Expanded(
                 child: Center(
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(
-                      maxHeight: 190,
-                    ),
+                    constraints: const BoxConstraints(maxHeight: 190),
                     child: SizedBox(
                       width: double.infinity,
                       height: 176,

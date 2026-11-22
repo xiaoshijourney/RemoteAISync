@@ -35,6 +35,15 @@ Future<void> main(List<String> args) async {
     } else if (method == 'initialized') {
       stdout.writeln(
         jsonEncode({
+          'method': 'turn/started',
+          'params': {
+            'threadId': 'interruptible-desktop-thread',
+            'turn': {'id': 'desktop-active-turn'},
+          },
+        }),
+      );
+      stdout.writeln(
+        jsonEncode({
           'method': 'item/started',
           'params': {
             'threadId': 'fake-thread',
@@ -627,6 +636,20 @@ Future<void> main(List<String> args) async {
             'params': {
               'threadId': params['threadId'],
               'turn': {'id': params['expectedTurnId'], 'status': 'completed'},
+            },
+          }),
+        );
+      }
+      if (method == 'turn/interrupt' &&
+          (frame['params'] as Map)['threadId'] ==
+              'interruptible-desktop-thread') {
+        final params = frame['params'] as Map;
+        stdout.writeln(
+          jsonEncode({
+            'method': 'turn/completed',
+            'params': {
+              'threadId': params['threadId'],
+              'turn': {'id': params['turnId'], 'status': 'interrupted'},
             },
           }),
         );

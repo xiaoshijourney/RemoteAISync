@@ -114,12 +114,12 @@ class AgentCapabilityProfile {
       agentId: 'codex',
       canCreate: false,
       canReply: true,
-      canInterrupt: false,
+      canInterrupt: true,
       canChangeSettings: false,
       canApprove: false,
       canAnswerForms: false,
       delivery: '桌面会话队列',
-      note: '消息会排队交给电脑上的 Codex 桌面会话处理。',
+      note: '发送新消息会先尝试停止当前回复；桌面会话仍占用时再排队。',
     );
   }
 }
